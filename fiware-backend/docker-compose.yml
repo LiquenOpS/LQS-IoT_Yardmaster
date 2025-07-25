@@ -9,7 +9,7 @@ services:
     depends_on:
       - mongo-db
     networks:
-      - fiware_net
+      - odoo_net
     ports:
       - "${ORION_PORT}:${ORION_PORT}" # e.g., localhost:1026
     command: -dbURI mongodb://mongo-db:${MONGO_DB_PORT} -logLevel DEBUG -noCache
@@ -28,7 +28,7 @@ services:
       - mongo-db
       - orion
     networks:
-      - fiware_net
+      - odoo_net
     ports:
       - "${IOTA_NORTH_PORT}:${IOTA_NORTH_PORT}" # e.g., localhost:4041 for device traffic
       - "${IOTA_SOUTH_PORT}:${IOTA_SOUTH_PORT}" # South Port for commands
@@ -61,7 +61,7 @@ services:
     ports:
       - "${MONGO_DB_PORT}:${MONGO_DB_PORT}" # e.g., localhost:27017 for local debugging
     networks:
-      - fiware_net
+      - odoo_net
     volumes:
       - mongo-db:/data/db
     healthcheck:
@@ -72,12 +72,9 @@ services:
       start_period: 5s
 
 networks:
-  fiware_net:
-    labels:
-      org.fiware: 'signage-project'
-    ipam:
-      config:
-        - subnet: 172.18.1.0/24
+  odoo_net:
+    name: odoobundle-codebase_odoo-net
+    external: true
 
 volumes:
   mongo-db: ~
