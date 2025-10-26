@@ -37,16 +37,12 @@ PAYLOAD=$(cat <<EOF
                     "type": "command"
                 },
                 {
-                    "name": "updateAssetPut",
-                    "type": "command"
-                },
-                {
                     "name": "updateAssetPatch",
                     "type": "command"
                 }
             ],
             "attributes": [
-                { "object_id": "status", "name": "status", "type": "Text" },
+                { "object_id": "device_status", "name": "device_status", "type": "Text" },
                 { "object_id": "displayUrl", "name": "displayUrl", "type": "Text" }
             ]
         }

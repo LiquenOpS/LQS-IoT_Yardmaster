@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # set project root directory
-PROJECT_DIR=$(dirname "$0")
+SCRIPT_PATH=$(readlink -f "$0")
+PROJECT_DIR=$(dirname "$SCRIPT_PATH")
 
 # Check if DEVICE_ID and DEVICE_NAME are set, if not, prompt for input
 if [ ! -f "$PROJECT_DIR/device.env" ]; then
@@ -18,7 +19,7 @@ else
     echo "Using existing device settings: DEVICE_ID=$DEVICE_ID, DEVICE_NAME=$DEVICE_NAME"
 fi
 
-source "$PROJECT_DIR/config.sh"
+source "$PROJECT_DIR/config.env"
 source "$PROJECT_DIR/device.env"
 
 # Executing setup scripts in project/setup directory

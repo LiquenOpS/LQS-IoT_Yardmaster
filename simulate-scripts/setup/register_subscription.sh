@@ -15,7 +15,7 @@ curl -L -X POST "http://${HOST}:${ORION_PORT}/v2/subscriptions" \
     ],
     "condition": {
       "attrs": [
-        "status"
+        "device_status"
       ]
     }
   },
