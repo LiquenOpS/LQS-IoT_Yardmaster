@@ -4,7 +4,7 @@
 # Script to List all provisioned Service Groups in the IoT Agent
 # =================================================================
 
-source ../config.sh
+source ../config.env
 
 echo "Listing all existing Service Groups for service [${FIWARE_SERVICE}]..."
 echo "------------------------------------------------------------------"

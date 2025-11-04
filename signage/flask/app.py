@@ -1,16 +1,22 @@
 from flask import Flask, request, jsonify
 import requests
 import json
-
+from dotenv import load_dotenv
+import os
 app = Flask(__name__)
+
+load_dotenv("../config.env")
+load_dotenv("../device.env")
+IOTA_HOST = os.environ.get("IOTA_HOST")
+IOTA_SOUTH_PORT = os.environ.get("IOTA_SOUTH_PORT")
+
+API_KEY = "SignKey" # Same as fiware service group
+
+ENTITY_ID = os.environ.get("DEVICE_ID")
 
 ANTHIAS_BASE_URL = "http://localhost:8000/api/v2/assets"
 
-NORTHBOUND_URL = "http://localhost:7896/iot/json"
-
-API_KEY = "SignKey"
-
-ENTITY_ID = "Test-001"
+NORTHBOUND_URL = f"http://{IOTA_HOST}:{IOTA_SOUTH_PORT}/iot/json" #IOTA HOST SOUTHBOUND PORT
 
 def send_northbound_response(resp_data):
     print(type(resp_data))

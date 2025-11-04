@@ -22,11 +22,8 @@ fi
 source "$PROJECT_DIR/config.env"
 source "$PROJECT_DIR/device.env"
 
-# Executing setup scripts in project/setup directory
+# Executing setup scripts in project/setup directo  ry
 echo "Initializing setup scripts..."
-bash "$PROJECT_DIR/setup/provision_service_group.sh"
-echo ""
-bash "$PROJECT_DIR/setup/register_subscription.sh"
 echo ""
 bash "$PROJECT_DIR/setup/provision_device.sh"
 

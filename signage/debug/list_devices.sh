@@ -1,5 +1,5 @@
 #!/bin/bash
-source ../config.sh
+source ../config.env
 
 curl -s -X GET \
 	   "http://${IOTA_HOST}:${IOTA_NORTH_PORT}/iot/devices" \
