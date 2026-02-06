@@ -11,7 +11,12 @@ Single FIWARE device (entity type **Yardmaster**) that can expose **Signage** (a
    - On first run: prompt Enable Signage? / Enable LED-strip? and write to config.
    - Ask whether to edit `config/config.env` for IOTA host, URLs, etc. (optional).
    - Provision the device with FIWARE and add heartbeat cron.
-3. Start the command gateway: `python -m flask --app flask.app run --host=0.0.0.0 --port=5000`. Health: `GET /health`.
+3. Start the command gateway:
+   - **As service (recommended):** In setup choose "Install systemd service", or manually:
+     `sed 's|@INSTALL_DIR@|/path/to/repo|' systemd/yardmaster.service | sudo tee /etc/systemd/system/yardmaster.service`
+     then `sudo systemctl daemon-reload && sudo systemctl enable --now yardmaster`
+   - **Manual:** `./run.sh` (sources config and starts Flask).  
+   Health: `GET /health`.
 
 ## FIWARE
 

@@ -1,0 +1,18 @@
+# Install: sudo ./setup.sh (choose "Install systemd service") or manually:
+#   sed 's|@INSTALL_DIR@|/opt/yardmaster|' systemd/yardmaster.service | sudo tee /etc/systemd/system/yardmaster.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now yardmaster
+
+[Unit]
+Description=Yardmaster FIWARE command gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@INSTALL_DIR@
+ExecStart=@INSTALL_DIR@/run.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

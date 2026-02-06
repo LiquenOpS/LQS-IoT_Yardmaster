@@ -71,6 +71,18 @@ else
   echo "  Added heartbeat every 2 minutes."
 fi
 
+# ---- 7. Optional: install systemd service ----
+chmod +x "$ROOT/run.sh"
 echo ""
-echo "Done. Start the Flask app:"
-echo "  python -m flask --app flask.app run --host=0.0.0.0 --port=${YARDMASTER_PORT:-5000}"
+read -p "Install systemd service (start on boot, restart on failure)? [y/N]: " INSTALL_SVC
+if [[ "$INSTALL_SVC" =~ ^[yY] ]]; then
+  echo "Installing service requires sudo (you may be prompted for password)."
+  sudo -v
+  SVC_FILE="/etc/systemd/system/yardmaster.service"
+  sed "s|@INSTALL_DIR@|$ROOT|g" "$ROOT/systemd/yardmaster.service" | sudo tee "$SVC_FILE" > /dev/null
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now yardmaster
+  echo "  -> $SVC_FILE installed and started."
+else
+  echo "Run manually: $ROOT/run.sh"
+fi
