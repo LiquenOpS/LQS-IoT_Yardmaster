@@ -21,4 +21,4 @@ if [ ! -x "$PYTHON" ]; then
   exit 1
 fi
 export PYTHONPATH="$ROOT"
-exec "$PYTHON" -m flask --app "flask.app:app" run --host=0.0.0.0 --port="${YARDMASTER_PORT:-5000}"
+exec "$PYTHON" -m flask --app "gateway.app:app" run --host=0.0.0.0 --port="${YARDMASTER_PORT:-5000}"
