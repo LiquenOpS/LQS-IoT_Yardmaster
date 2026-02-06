@@ -4,14 +4,14 @@ Single FIWARE device (entity type **Yardmaster**) that can expose **Signage** (a
 
 ## Setup
 
-1. `pip install -r requirements.txt` (Python 3.10+).
-2. Run `./setup.sh` once. It will:
-   - Create `config/` from `config.example` if missing (gitignored).
+1. Run `./setup.sh` once. It will:
+   - Create `.venv`, install deps from `requirements.txt` (Python 3.10+).
+   - Create `config/` from `config.example` if missing (gitignored);
    - Prompt for Device ID / Device Name (defaults: yardmaster-01, Yardmaster-01).
    - On first run: prompt Enable Signage? / Enable LED-strip? and write to config.
    - Ask whether to edit `config/config.env` for IOTA host, URLs, etc. (optional).
    - Provision the device with FIWARE and add heartbeat cron.
-3. Start the command gateway:
+2. Start the command gateway:
    - **As service (recommended):** In setup choose "Install systemd service", or manually:
      `sed 's|@INSTALL_DIR@|/path/to/repo|' systemd/yardmaster.service | sudo tee /etc/systemd/system/yardmaster.service`
      then `sudo systemctl daemon-reload && sudo systemctl enable --now yardmaster`

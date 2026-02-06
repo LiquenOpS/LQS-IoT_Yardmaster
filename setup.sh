@@ -50,7 +50,18 @@ if [[ "$EDIT" =~ ^[yY] ]]; then
   "${EDITOR:-nano}" "$CONFIG_DIR/config.env"
 fi
 
-# ---- 5. Source and provision ----
+# ---- 5. Venv and deps ----
+if [ ! -x "$ROOT/.venv/bin/python3" ]; then
+  echo "Creating .venv and installing dependencies..."
+  python3 -m venv "$ROOT/.venv"
+  "$ROOT/.venv/bin/pip" install -r "$ROOT/requirements.txt"
+  echo "  -> .venv ready."
+else
+  echo "Checking dependencies in .venv..."
+  "$ROOT/.venv/bin/pip" install -q -r "$ROOT/requirements.txt"
+fi
+
+# ---- 6. Source and provision ----
 set -a
 source "$CONFIG_DIR/config.env"
 source "$CONFIG_DIR/device.env"
@@ -60,7 +71,7 @@ echo ""
 echo "Provisioning Yardmaster device..."
 bash "$ROOT/setup/provision_device.sh"
 
-# ---- 6. Cron for heartbeat ----
+# ---- 7. Cron for heartbeat ----
 echo ""
 echo "Setting up cron for heartbeat..."
 CRON_CMD="*/2 * * * * $ROOT/jobs/send_heartbeat.sh"
@@ -71,7 +82,7 @@ else
   echo "  Added heartbeat every 2 minutes."
 fi
 
-# ---- 7. Optional: install systemd service ----
+# ---- 8. Optional: install systemd service ----
 chmod +x "$ROOT/run.sh"
 echo ""
 read -p "Install systemd service (start on boot, restart on failure)? [y/N]: " INSTALL_SVC

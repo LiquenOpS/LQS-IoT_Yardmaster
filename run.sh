@@ -11,4 +11,6 @@ source "$CONFIG_DIR/config.env"
 [ -f "$CONFIG_DIR/device.env" ] && source "$CONFIG_DIR/device.env"
 set +a
 
-exec python3 -m flask --app flask.app run --host=0.0.0.0 --port="${YARDMASTER_PORT:-5000}"
+PYTHON="${ROOT}/.venv/bin/python3"
+[ -x "$PYTHON" ] || PYTHON=python3
+exec "$PYTHON" -m flask --app flask.app run --host=0.0.0.0 --port="${YARDMASTER_PORT:-5000}"
