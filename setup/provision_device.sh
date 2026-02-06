@@ -42,7 +42,7 @@ PAYLOAD=$(cat <<EOF
       "entity_type": "Yardmaster",
       "transport": "HTTP",
       "protocol": "PDI-IoTA-JSON",
-      "apikey": "SignKey",
+      "apikey": "${API_KEY}",
       "endpoint": "http://${YARDMASTER_HOST}:${YARDMASTER_PORT}/command",
       "commands": [ ${CMD_PARTS} ],
       "attributes": [ ${ATTR_PARTS} ]

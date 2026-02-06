@@ -5,8 +5,9 @@ Single FIWARE device (entity type **Yardmaster**) that can expose **Signage** (a
 ## Setup
 
 1. Copy the `config.example` folder to `config`, then edit `config/config.env` (`ENABLE_SIGNAGE` / `ENABLE_LED_STRIP`, IOTA host, `ANTHIAS_BASE_URL`, `GLIMMER_BASE_URL`). The `config/` folder is gitignored.
-2. Run `./setup.sh` once (prompts for Device ID/Name, provisions device with FIWARE, adds heartbeat cron).
-3. Start the command gateway: from repo root, `python -m flask --app flask.app run --host=0.0.0.0 --port=5000` (or set `YARDMASTER_PORT` in config).
+2. `pip install -r requirements.txt` (Python 3.10+).
+3. Run `./setup.sh` once (prompts for Device ID/Name, provisions device with FIWARE, adds heartbeat cron).
+4. Start the command gateway: `python -m flask --app flask.app run --host=0.0.0.0 --port=5000` (or set `YARDMASTER_PORT` in config). Health check: `GET /health`.
 
 ## FIWARE
 

@@ -81,6 +81,11 @@ def glimmer_post(path, body=None):
         return {"status_code": r.status_code, "text": r.text}
 
 
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"}), 200
+
+
 @app.route("/command", methods=["POST"])
 def dispatch_command():
     data = request.get_json() or {}
