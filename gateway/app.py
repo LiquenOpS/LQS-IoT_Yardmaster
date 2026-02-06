@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 import requests
 import json
 import os
+import threading
+import time
 
 from dotenv import load_dotenv
 _root = os.path.join(os.path.dirname(__file__), "..")
@@ -25,6 +27,24 @@ ENABLE_SIGNAGE = os.environ.get("ENABLE_SIGNAGE", "true").lower() == "true"
 ENABLE_LED_STRIP = os.environ.get("ENABLE_LED_STRIP", "true").lower() == "true"
 
 NORTHBOUND_URL = f"http://{IOTA_HOST}:{IOTA_SOUTH_PORT}/iot/json"
+HEARTBEAT_INTERVAL = 120  # seconds
+
+
+def _heartbeat_loop():
+    """Send deviceStatus to IOTA South every HEARTBEAT_INTERVAL (service runs in process)."""
+    time.sleep(10)  # let server bind first
+    while True:
+        try:
+            requests.post(
+                NORTHBOUND_URL,
+                params={"k": API_KEY, "i": ENTITY_ID},
+                json={"deviceStatus": "online"},
+                headers={"Content-Type": "application/json"},
+                timeout=10,
+            )
+        except Exception as e:
+            print(f"Heartbeat error: {e}")
+        time.sleep(HEARTBEAT_INTERVAL)
 
 
 def send_northbound_response(resp_data):
@@ -140,3 +160,9 @@ def dispatch_command():
 
     send_northbound_response(result)
     return jsonify(result)
+
+
+# Start heartbeat thread (daemon so it exits with the process)
+if ENTITY_ID:
+    _hb = threading.Thread(target=_heartbeat_loop, daemon=True)
+    _hb.start()

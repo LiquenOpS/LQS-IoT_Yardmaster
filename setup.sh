@@ -71,18 +71,7 @@ echo ""
 echo "Provisioning Yardmaster device..."
 bash "$ROOT/setup/provision_device.sh"
 
-# ---- 7. Cron for heartbeat ----
-echo ""
-echo "Setting up cron for heartbeat..."
-CRON_CMD="*/2 * * * * $ROOT/jobs/send_heartbeat.sh"
-if crontab -l 2>/dev/null | grep -qF "$ROOT/jobs/send_heartbeat.sh"; then
-  echo "  Heartbeat cron already exists."
-else
-  (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
-  echo "  Added heartbeat every 2 minutes."
-fi
-
-# ---- 8. Optional: install systemd service ----
+# ---- 7. Optional: install systemd service ----
 chmod +x "$ROOT/run.sh"
 echo ""
 read -p "Install systemd service (start on boot, restart on failure)? [y/N]: " INSTALL_SVC

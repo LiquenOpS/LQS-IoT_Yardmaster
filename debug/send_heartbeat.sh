@@ -1,4 +1,5 @@
 #!/bin/bash
+# Manual heartbeat (gateway sends in-process every 2 min; use this for testing.)
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 ROOT="$(dirname "$SCRIPT_DIR")"
 [ -f "$ROOT/config/config.env" ] && CONFIG_DIR="$ROOT/config" || CONFIG_DIR="$ROOT"
