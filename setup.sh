@@ -1,40 +1,76 @@
 #!/bin/bash
-# One-time setup: copy config.example to config, then run this once per device.
+# One-time setup: creates config from template, prompts for device and options, then provisions.
 
+set -e
 SCRIPT_PATH=$(readlink -f "$0")
 ROOT=$(dirname "$SCRIPT_PATH")
-[ -f "$ROOT/config/config.env" ] && CONFIG_DIR="$ROOT/config" || CONFIG_DIR="$ROOT"
 
-if [ ! -f "$CONFIG_DIR/config.env" ]; then
-  echo "Error: No config found. Copy config.example to config and edit config/config.env"
-  exit 1
+# ---- 1. Ensure config dir (copy from config.example if missing) ----
+CONFIG_CREATED=false
+if [ ! -f "$ROOT/config/config.env" ]; then
+  if [ ! -d "$ROOT/config.example" ]; then
+    echo "Error: config.example not found."
+    exit 1
+  fi
+  echo "Creating config/ from config.example..."
+  cp -r "$ROOT/config.example" "$ROOT/config"
+  echo "  -> config/config.env created."
+  CONFIG_CREATED=true
 fi
 
+CONFIG_DIR="$ROOT/config"
+
+# ---- 2. Device ID / Name (interactive if missing) ----
 if [ ! -f "$CONFIG_DIR/device.env" ]; then
-  echo "Input required to set up the device."
-  read -p "Device ID: " DEVICE_ID
-  read -p "Device Name: " DEVICE_NAME
-  mkdir -p "$CONFIG_DIR"
+  echo ""
+  read -p "Device ID [yardmaster-01]: " DEVICE_ID
+  DEVICE_ID="${DEVICE_ID:-yardmaster-01}"
+  read -p "Device Name [Yardmaster-01]: " DEVICE_NAME
+  DEVICE_NAME="${DEVICE_NAME:-Yardmaster-01}"
   echo "export DEVICE_ID=${DEVICE_ID}" > "$CONFIG_DIR/device.env"
   echo "export DEVICE_NAME=${DEVICE_NAME}" >> "$CONFIG_DIR/device.env"
-  echo "Info saved to $CONFIG_DIR/device.env"
+  echo "  -> config/device.env saved."
 fi
 
+# ---- 3. Capabilities (only when config was just created) ----
+if [ "$CONFIG_CREATED" = true ]; then
+  echo ""
+  read -p "Enable Signage (anthias)? [Y/n]: " Y
+  ENABLE_SIGNAGE=true; [[ "$Y" =~ ^[nN] ]] && ENABLE_SIGNAGE=false
+  read -p "Enable LED-strip (Glimmer)? [Y/n]: " Y
+  ENABLE_LED_STRIP=true; [[ "$Y" =~ ^[nN] ]] && ENABLE_LED_STRIP=false
+  sed -i "s/^ENABLE_SIGNAGE=.*/ENABLE_SIGNAGE=${ENABLE_SIGNAGE}/" "$CONFIG_DIR/config.env"
+  sed -i "s/^ENABLE_LED_STRIP=.*/ENABLE_LED_STRIP=${ENABLE_LED_STRIP}/" "$CONFIG_DIR/config.env"
+fi
+
+# ---- 4. Optional: edit full config (IOTA host, URLs, etc.) ----
+echo ""
+read -p "Edit config/config.env for IOTA/URLs now? [y/N]: " EDIT
+if [[ "$EDIT" =~ ^[yY] ]]; then
+  "${EDITOR:-nano}" "$CONFIG_DIR/config.env"
+fi
+
+# ---- 5. Source and provision ----
 set -a
 source "$CONFIG_DIR/config.env"
 source "$CONFIG_DIR/device.env"
 set +a
 
+echo ""
 echo "Provisioning Yardmaster device..."
 bash "$ROOT/setup/provision_device.sh"
 
+# ---- 6. Cron for heartbeat ----
+echo ""
 echo "Setting up cron for heartbeat..."
 CRON_CMD="*/2 * * * * $ROOT/jobs/send_heartbeat.sh"
-if ! crontab -l 2>/dev/null | grep -qF "$ROOT/jobs/send_heartbeat.sh"; then
-  (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
-  echo "Added heartbeat every 2 minutes."
+if crontab -l 2>/dev/null | grep -qF "$ROOT/jobs/send_heartbeat.sh"; then
+  echo "  Heartbeat cron already exists."
 else
-  echo "Heartbeat cron already exists."
+  (crontab -l 2>/dev/null; echo "$CRON_CMD") | crontab -
+  echo "  Added heartbeat every 2 minutes."
 fi
 
-echo "Done. Start the Flask app: python -m flask --app flask.app run --host=0.0.0.0 --port=${YARDMASTER_PORT:-5000}"
+echo ""
+echo "Done. Start the Flask app:"
+echo "  python -m flask --app flask.app run --host=0.0.0.0 --port=${YARDMASTER_PORT:-5000}"
