@@ -13,7 +13,7 @@ Single FIWARE device (entity type **Yardmaster**) that can expose **Signage** (a
    - Provision the device with FIWARE. Heartbeat (deviceStatus) is sent by the gateway service every 2 min.
 2. Start the command gateway:
    - **As service (recommended):** In setup choose "Install systemd service", or manually:
-     `sed 's|@INSTALL_DIR@|/path/to/repo|' systemd/yardmaster.service | sudo tee /etc/systemd/system/yardmaster.service`
+     `sed 's|@INSTALL_DIR@|/path/to/LQS-IoT_Yardmaster|' ops/systemd/yardmaster.service | sudo tee /etc/systemd/system/yardmaster.service`
      then `sudo systemctl daemon-reload && sudo systemctl enable --now yardmaster`
    - **Manual:** `./run.sh` (sources config and starts Flask).  
    Health: `GET /health`.

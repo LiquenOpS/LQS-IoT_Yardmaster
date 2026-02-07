@@ -69,7 +69,7 @@ set +a
 
 echo ""
 echo "Provisioning Yardmaster device..."
-bash "$ROOT/setup/provision_device.sh"
+bash "$ROOT/ops/provision_device.sh"
 
 # ---- 7. Optional: install systemd service ----
 chmod +x "$ROOT/run.sh"
@@ -79,7 +79,7 @@ if [[ "$INSTALL_SVC" =~ ^[yY] ]]; then
   echo "Installing service requires sudo (you may be prompted for password)."
   sudo -v
   SVC_FILE="/etc/systemd/system/yardmaster.service"
-  sed "s|@INSTALL_DIR@|$ROOT|g" "$ROOT/systemd/yardmaster.service" | sudo tee "$SVC_FILE" > /dev/null
+  sed "s|@INSTALL_DIR@|$ROOT|g" "$ROOT/ops/systemd/yardmaster.service" | sudo tee "$SVC_FILE" > /dev/null
   sudo systemctl daemon-reload
   sudo systemctl enable --now yardmaster
   echo "  -> $SVC_FILE installed and started."

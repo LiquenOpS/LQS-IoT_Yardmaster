@@ -1,5 +1,5 @@
-# Install: sudo ./setup.sh (choose "Install systemd service") or manually:
-#   sed 's|@INSTALL_DIR@|/opt/yardmaster|' systemd/yardmaster.service | sudo tee /etc/systemd/system/yardmaster.service
+# Install: Run ./setup.sh and choose "Install systemd service", or manually:
+#   sed 's|@INSTALL_DIR@|/path/to/LQS-IoT_Yardmaster|' ops/systemd/yardmaster.service | sudo tee /etc/systemd/system/yardmaster.service
 #   sudo systemctl daemon-reload && sudo systemctl enable --now yardmaster
 
 [Unit]

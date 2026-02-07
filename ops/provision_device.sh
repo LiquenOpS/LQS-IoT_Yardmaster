@@ -5,7 +5,7 @@ if [ -z "$DEVICE_ID" ] || [ -z "$DEVICE_NAME" ]; then
   exit 1
 fi
 
-ROOT="$(dirname "$(readlink -f "$0")")/.."
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [ -f "$ROOT/config/config.env" ] && CONFIG_DIR="$ROOT/config" || CONFIG_DIR="$ROOT"
 set -a
 source "$CONFIG_DIR/config.env"
@@ -52,8 +52,6 @@ PAYLOAD=$(cat <<EOF
 EOF
 )
 
-# Inject supportedType into entity (optional: IOTA may allow static attrs; else report via heartbeat)
-# For initial provisioning we only register attribute names; value can be set by heartbeat or first update.
 echo "Provisioning Yardmaster device: ${DEVICE_ID} ${DEVICE_NAME} (supportedType=${SUPPORTED_TYPE})"
 echo "----------------------------------------------"
 
