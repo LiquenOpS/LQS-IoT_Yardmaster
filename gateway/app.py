@@ -2,10 +2,14 @@ from flask import Flask, request, jsonify
 import requests
 import json
 import os
+import logging
 import threading
 import time
 
 from dotenv import load_dotenv
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger(__name__)
 _root = os.path.join(os.path.dirname(__file__), "..")
 _config_dir = os.path.join(_root, "config")
 if os.path.isfile(os.path.join(_config_dir, "config.env")):
@@ -109,6 +113,7 @@ def health():
 @app.route("/command", methods=["POST"])
 def dispatch_command():
     data = request.get_json() or {}
+    log.info("Command received: %s", list(data.keys()) if data else "empty")
     result = None
 
     # Signage
@@ -159,6 +164,7 @@ def dispatch_command():
         return jsonify({"error": "Unknown command"}), 400
 
     send_northbound_response(result)
+    log.info("Command dispatched, result keys: %s", list(result.keys()) if isinstance(result, dict) else str(result)[:80])
     return jsonify(result)
 
 
