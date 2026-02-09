@@ -24,13 +24,13 @@ Quick smoke test for Yardmaster → Glimmer (LED-strip) without Pylon/Odoo.
 
 3. **Verify health**
    ```bash
-   curl http://localhost:5000/health
+   curl http://localhost:8080/health
    # Expect: {"status":"ok"}
    ```
 
 4. **Test: turn off LED**
    ```bash
-   curl -X POST http://localhost:5000/command \
+   curl -X POST http://localhost:8080/command \
      -H "Content-Type: application/json" \
      -d '{"effectSet": {"effect": "off"}}'
    ```
@@ -38,12 +38,12 @@ Quick smoke test for Yardmaster → Glimmer (LED-strip) without Pylon/Odoo.
 
 5. **Test: set effect** (e.g. fire)
    ```bash
-   curl -X POST http://localhost:5000/command \
+   curl -X POST http://localhost:8080/command \
      -H "Content-Type: application/json" \
      -d '{"effectSet": {"effect": "fire"}}'
    ```
 
 ## Ports
 
-- Yardmaster: `YARDMASTER_PORT` (default 5000)
+- Yardmaster: `YARDMASTER_PORT` (default 8080)
 - Glimmer: `api_port` (default 1129)
