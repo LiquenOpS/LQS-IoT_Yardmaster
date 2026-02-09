@@ -11,9 +11,11 @@ echo "Yardmaster setup — what would you like to do?"
 echo "  1) Install essentials (config, device info, venv)"
 echo "  2) Provision (register device with IOTA)"
 echo "  3) Install systemd (start on boot)"
-echo "  4) Exit"
+echo "  4) Register to Discovery (Manual→Adopt bridge: push to Discovery, then Adopt in Odoo)"
+echo "  5) Provision from Discovery (Discovery→Manual: fetch endpoint from Discovery, then provision)"
+echo "  6) Exit"
 echo ""
-read -p "Choice [1-4]: " CHOICE
+read -p "Choice [1-6]: " CHOICE
 
 case "$CHOICE" in
   1)
@@ -93,6 +95,20 @@ case "$CHOICE" in
     fi
     ;;
   4)
+    [ ! -f "$CONFIG_DIR/config.env" ] && { echo "Error: config/config.env not found. Run option 1 first." >&2; exit 1; }
+    [ ! -f "$CONFIG_DIR/device.env" ] && { echo "Error: config/device.env not found. Run option 1 first." >&2; exit 1; }
+    bash "$ROOT/ops/register_to_discovery.sh"
+    ;;
+  5)
+    [ ! -f "$CONFIG_DIR/config.env" ] && { echo "Error: config/config.env not found. Run option 1 first." >&2; exit 1; }
+    [ ! -f "$CONFIG_DIR/device.env" ] && { echo "Error: config/device.env not found. Run option 1 first." >&2; exit 1; }
+    set -a
+    source "$CONFIG_DIR/config.env"
+    source "$CONFIG_DIR/device.env"
+    set +a
+    bash "$ROOT/ops/provision_device.sh" --from-discovery
+    ;;
+  6)
     echo "Bye."
     ;;
   *)

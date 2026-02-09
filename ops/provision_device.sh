@@ -1,9 +1,8 @@
 #!/bin/bash
 
-if [ -z "$DEVICE_ID" ] || [ -z "$DEVICE_NAME" ]; then
-  echo "Error: DEVICE_ID or DEVICE_NAME not set."
-  exit 1
-fi
+# Usage: provision_device.sh [--from-discovery] [--endpoint URL]
+#   --from-discovery: fetch endpoint from Discovery API by DEVICE_ID
+#   --endpoint URL:   override endpoint (e.g. from Discovery or manual)
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [ -f "$ROOT/config/config.env" ] && CONFIG_DIR="$ROOT/config" || CONFIG_DIR="$ROOT"
@@ -11,6 +10,20 @@ set -a
 source "$CONFIG_DIR/config.env"
 [ -f "$CONFIG_DIR/device.env" ] && source "$CONFIG_DIR/device.env"
 set +a
+
+PROVISION_ENDPOINT=""
+PROVISION_FROM_DISCOVERY=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --from-discovery) PROVISION_FROM_DISCOVERY=1; shift ;;
+    --endpoint)       PROVISION_ENDPOINT="$2"; shift 2 ;;
+    *) break ;;
+  esac
+done
+if [ -z "$DEVICE_ID" ] || [ -z "$DEVICE_NAME" ]; then
+  echo "Error: DEVICE_ID or DEVICE_NAME not set."
+  exit 1
+fi
 
 # supportedType: Signage, LED-strip, or Signage,LED-strip
 SUPPORTED_TYPE=""
@@ -33,6 +46,21 @@ fi
 ATTR_PARTS='{"object_id":"deviceStatus","name":"deviceStatus","type":"Text"},{"object_id":"supportedType","name":"supportedType","type":"Text"}'
 [ "$ENABLE_SIGNAGE" = "true" ] && ATTR_PARTS="${ATTR_PARTS},{\"object_id\":\"displayUrl\",\"name\":\"displayUrl\",\"type\":\"Text\"}"
 
+# Resolve endpoint: --endpoint > --from-discovery > config
+ENDPOINT=""
+if [ -n "${PROVISION_ENDPOINT:-}" ]; then
+  ENDPOINT="$PROVISION_ENDPOINT"
+elif [ -n "${PROVISION_FROM_DISCOVERY:-}" ]; then
+  DISCOVERY_HOST="${DISCOVERY_HOST:-localhost}"
+  DISCOVERY_PORT="${DISCOVERY_PORT:-5050}"
+  DISCOVERY_URL="http://${DISCOVERY_HOST}:${DISCOVERY_PORT}/devices/${DEVICE_ID}"
+  RESP=$(curl -sS -f "$DISCOVERY_URL" 2>/dev/null) || { echo "Error: could not fetch from Discovery ($DISCOVERY_URL)" >&2; exit 1; }
+  ENDPOINT=$(echo "$RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('endpoint',''))")
+  [ -z "$ENDPOINT" ] && { echo "Error: no endpoint in Discovery for ${DEVICE_ID}" >&2; exit 1; }
+else
+  ENDPOINT="http://${YARDMASTER_HOST}:${YARDMASTER_PORT}/command"
+fi
+
 PAYLOAD=$(cat <<EOF
 {
   "devices": [
@@ -43,7 +71,7 @@ PAYLOAD=$(cat <<EOF
       "transport": "HTTP",
       "protocol": "PDI-IoTA-JSON",
       "apikey": "${API_KEY}",
-      "endpoint": "http://${YARDMASTER_HOST}:${YARDMASTER_PORT}/command",
+      "endpoint": "${ENDPOINT}",
       "commands": [ ${CMD_PARTS} ],
       "attributes": [ ${ATTR_PARTS} ]
     }

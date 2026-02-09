@@ -33,6 +33,35 @@ ENABLE_LED_STRIP = os.environ.get("ENABLE_LED_STRIP", "true").lower() == "true"
 NORTHBOUND_URL = f"http://{IOTA_HOST}:{IOTA_SOUTH_PORT}/iot/json"
 HEARTBEAT_INTERVAL = 120  # seconds
 
+# Discovery registration (optional, for Discovery + Adopt flow)
+ENABLE_DISCOVERY_REGISTRATION = os.environ.get("ENABLE_DISCOVERY_REGISTRATION", "false").lower() == "true"
+DISCOVERY_HOST = os.environ.get("DISCOVERY_HOST", "localhost")
+DISCOVERY_PORT = os.environ.get("DISCOVERY_PORT", "5050")
+YARDMASTER_HOST = os.environ.get("YARDMASTER_HOST", "host.docker.internal")
+YARDMASTER_PORT = os.environ.get("YARDMASTER_PORT", "8080")
+ENTITY_NAME = os.environ.get("DEVICE_NAME", ENTITY_ID or "Yardmaster")
+
+
+def _register_discovery():
+    """Register this device with Discovery so it appears as pending for Adopt."""
+    if not ENABLE_DISCOVERY_REGISTRATION or not ENTITY_ID:
+        return
+    url = f"http://{DISCOVERY_HOST}:{DISCOVERY_PORT}/devices"
+    endpoint = f"http://{YARDMASTER_HOST}:{YARDMASTER_PORT}/command"
+    payload = {
+        "device_id": ENTITY_ID,
+        "device_name": ENTITY_NAME,
+        "endpoint": endpoint,
+    }
+    try:
+        r = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=5)
+        if r.ok:
+            log.info("Registered with Discovery: %s", ENTITY_ID)
+        else:
+            log.warning("Discovery registration failed: %s %s", r.status_code, r.text[:200])
+    except Exception as e:
+        log.warning("Discovery registration failed: %s", e)
+
 
 def _heartbeat_loop():
     """Send deviceStatus to IOTA South every HEARTBEAT_INTERVAL (service runs in process)."""
@@ -172,3 +201,11 @@ def dispatch_command():
 if ENTITY_ID:
     _hb = threading.Thread(target=_heartbeat_loop, daemon=True)
     _hb.start()
+
+# Register with Discovery on startup if enabled (short delay so server binds first)
+if ENABLE_DISCOVERY_REGISTRATION and ENTITY_ID:
+    def _discovery_registration_delayed():
+        time.sleep(5)
+        _register_discovery()
+
+    threading.Thread(target=_discovery_registration_delayed, daemon=True).start()
