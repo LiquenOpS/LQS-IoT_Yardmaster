@@ -23,7 +23,7 @@ app = Flask(__name__)
 
 IOTA_HOST = os.environ.get("IOTA_HOST", "localhost")
 IOTA_SOUTH_PORT = os.environ.get("IOTA_SOUTH_PORT", "7896")
-API_KEY = os.environ.get("API_KEY", "SignKey")
+API_KEY = os.environ.get("API_KEY", "YardmasterKey")
 ENTITY_ID = os.environ.get("DEVICE_ID")
 ANTHIAS_BASE_URL = os.environ.get("ANTHIAS_BASE_URL", "http://localhost:8000/api/v2/assets")
 GLIMMER_BASE_URL = os.environ.get("GLIMMER_BASE_URL", "http://localhost:1129").rstrip("/")
