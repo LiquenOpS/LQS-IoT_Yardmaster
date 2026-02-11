@@ -10,15 +10,24 @@ echo ""
 echo "Yardmaster setup — what would you like to do?"
 echo "  1) Install essentials (config, device info, venv)"
 echo "  2) Provision (register device with IOTA)"
-echo "  3) Install systemd (start on boot)"
-echo "  4) Exit"
+echo "  3) Deprovision (remove from IOTA and Orion)"
+echo "  4) Install systemd (start on boot)"
+echo "  5) Exit"
 echo ""
-read -p "Choice [1-4]: " CHOICE
+read -p "Choice [1-5]: " CHOICE
 
 case "$CHOICE" in
   1)
     # ---- Config ----
     CONFIG_CREATED=false
+    RESET_DEVICE=false
+    if [ -f "$CONFIG_DIR/device.env" ]; then
+      read -p "Reset device config for re-test (re-prompt device ID, name, capabilities)? [y/N]: " RESET
+      if [[ "$RESET" =~ ^[yY] ]]; then
+        rm -f "$CONFIG_DIR/device.env"
+        RESET_DEVICE=true
+      fi
+    fi
     if [ ! -f "$CONFIG_DIR/config.env" ]; then
       [ ! -d "$ROOT/config.example" ] && { echo "Error: config.example not found." >&2; exit 1; }
       echo "Creating config/ from config.example..."
@@ -39,8 +48,8 @@ case "$CHOICE" in
       echo "  -> config/device.env saved."
     fi
 
-    # ---- Capabilities (only when config was just created) ----
-    if [ "$CONFIG_CREATED" = true ]; then
+    # ---- Capabilities (when config just created or reset for re-test) ----
+    if [ "$CONFIG_CREATED" = true ] || [ "$RESET_DEVICE" = true ]; then
       echo ""
       read -p "Enable Signage (anthias)? [Y/n]: " Y
       ENABLE_SIGNAGE=true; [[ "$Y" =~ ^[nN] ]] && ENABLE_SIGNAGE=false
@@ -50,10 +59,9 @@ case "$CHOICE" in
       sed -i "s/^ENABLE_LED_STRIP=.*/ENABLE_LED_STRIP=${ENABLE_LED_STRIP}/" "$CONFIG_DIR/config.env"
     fi
 
-    read -p "Edit config/config.env for IOTA/URLs now? [y/N]: " EDIT
+    echo "  Important: set IOTA_HOST (where Pylon runs), YARDMASTER_HOST (this unit's address), YARDMASTER_PORT, API_KEY."
+    read -p "Edit config/config.env now? [y/N]: " EDIT
     [[ "$EDIT" =~ ^[yY] ]] && "${EDITOR:-nano}" "$CONFIG_DIR/config.env"
-    echo ""
-    echo "  Important: set IOTA_HOST (where Pylon runs), YARDMASTER_HOST (this unit's address), YARDMASTER_PORT."
 
     # ---- Venv ----
     if [ ! -x "$ROOT/.venv/bin/python3" ]; then
@@ -84,6 +92,11 @@ case "$CHOICE" in
     echo "Done. If status 200/201, device is registered. It will appear in Odoo after first heartbeat."
     ;;
   3)
+    [ ! -f "$CONFIG_DIR/config.env" ] && { echo "Error: config/config.env not found. Run option 1 first." >&2; exit 1; }
+    [ ! -f "$CONFIG_DIR/device.env" ] && { echo "Error: config/device.env not found. Run option 1 first." >&2; exit 1; }
+    bash "$ROOT/ops/deprovision_device.sh"
+    ;;
+  4)
     chmod +x "$ROOT/run.sh"
     read -p "Install systemd service (start on boot)? [y/N]: " Y
     if [[ "$Y" =~ ^[yY] ]]; then
@@ -95,7 +108,7 @@ case "$CHOICE" in
       echo "  -> $SVC_FILE installed and started."
     fi
     ;;
-  4)
+  5)
     echo "Bye."
     ;;
   *)
