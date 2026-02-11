@@ -15,9 +15,9 @@ source "$CONFIG_DIR/config.env"
 [ -f "$CONFIG_DIR/device.env" ] && source "$CONFIG_DIR/device.env"
 set +a
 
-PYTHON="${ROOT}/.venv/bin/python3"
+PYTHON="${ROOT}/venv/bin/python3"
 if [ ! -x "$PYTHON" ]; then
-  echo "Error: .venv not found. Run ./setup.sh first." >&2
+  echo "Error: venv not found. Run ./setup.sh first." >&2
   exit 1
 fi
 export PYTHONPATH="$ROOT"

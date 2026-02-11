@@ -12,9 +12,10 @@ echo "  1) Install essentials (config, device info, venv)"
 echo "  2) Provision (register device with IOTA)"
 echo "  3) Deprovision (remove from IOTA and Orion)"
 echo "  4) Install systemd (start on boot)"
-echo "  5) Exit"
+echo "  5) Uninstall (deprovision, stop, remove systemd)"
+echo "  6) Exit"
 echo ""
-read -p "Choice [1-5]: " CHOICE
+read -p "Choice [1-6]: " CHOICE
 
 case "$CHOICE" in
   1)
@@ -61,18 +62,18 @@ case "$CHOICE" in
 
     echo "  Important: set IOTA_HOST (where Pylon runs), YARDMASTER_HOST (this unit's address), YARDMASTER_PORT, API_KEY."
     read -p "Edit config/config.env now? [y/N]: " EDIT
-    [[ "$EDIT" =~ ^[yY] ]] && "${EDITOR:-nano}" "$CONFIG_DIR/config.env"
+    [[ "$EDIT" =~ ^[yY] ]] && "${EDITOR:-vi}" "$CONFIG_DIR/config.env"
 
     # ---- Venv ----
-    if [ ! -x "$ROOT/.venv/bin/python3" ]; then
+    if [ ! -x "$ROOT/venv/bin/python3" ]; then
       echo ""
-      echo "Creating .venv and installing dependencies..."
-      python3 -m venv "$ROOT/.venv"
-      "$ROOT/.venv/bin/pip" install -r "$ROOT/requirements.txt"
-      echo "  -> .venv ready."
+      echo "Creating venv and installing dependencies..."
+      python3 -m venv "$ROOT/venv"
+      "$ROOT/venv/bin/pip" install -r "$ROOT/requirements.txt"
+      echo "  -> venv ready."
     else
       echo ""
-      "$ROOT/.venv/bin/pip" install -q -r "$ROOT/requirements.txt"
+      "$ROOT/venv/bin/pip" install -q -r "$ROOT/requirements.txt"
     fi
 
     chmod +x "$ROOT/run.sh"
@@ -109,6 +110,30 @@ case "$CHOICE" in
     fi
     ;;
   5)
+    echo "==> Uninstalling Yardmaster..."
+    SVC_FILE="/etc/systemd/system/yardmaster.service"
+    if [ -f "$SVC_FILE" ]; then
+      sudo -v
+      sudo systemctl stop yardmaster 2>/dev/null || true
+      sudo systemctl disable yardmaster 2>/dev/null || true
+      sudo rm -f "$SVC_FILE"
+      sudo systemctl daemon-reload
+      echo "  -> systemd service removed."
+    fi
+    if [ -f "$CONFIG_DIR/config.env" ] && [ -f "$CONFIG_DIR/device.env" ]; then
+      read -p "Deprovision device from IOTA/Orion first? [Y/n]: " Y
+      if [[ ! "$Y" =~ ^[nN] ]]; then
+        bash "$ROOT/ops/deprovision_device.sh"
+      fi
+    fi
+    read -p "Remove config/ and venv? [y/N]: " Y
+    if [[ "$Y" =~ ^[yY] ]]; then
+      rm -rf "$CONFIG_DIR" "$ROOT/venv"
+      echo "  -> config and venv removed."
+    fi
+    echo "Done."
+    ;;
+  6)
     echo "Bye."
     ;;
   *)

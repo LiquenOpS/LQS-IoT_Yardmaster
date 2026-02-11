@@ -5,7 +5,7 @@ Single FIWARE device (entity type **Yardmaster**) that can expose **Signage** (a
 ## Setup
 
 1. Run `./setup.sh` once. It will:
-   - Create `.venv`, install deps from `requirements.txt` (Python 3.10+).
+   - Create `venv`, install deps from `requirements.txt` (Python 3.10+).
    - Create `config/` from `config.example` if missing (gitignored);
    - Prompt for Device ID / Device Name (defaults: yardmaster-01, Yardmaster-01).
    - On first run: prompt Enable Signage? / Enable LEDStrip? and write to config.
