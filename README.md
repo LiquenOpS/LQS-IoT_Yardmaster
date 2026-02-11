@@ -32,7 +32,5 @@ Single FIWARE device (entity type **Yardmaster**) that can expose **Signage** (a
 
 ## Debug
 
-- `debug/list_devices.sh` — IOTA devices
-- `debug/list_entities.sh` — Orion entities (needs `ORION_HOST`, `ORION_PORT` in config)
-- `debug/list_group.sh` — IOTA service groups
-- `debug/send_heartbeat.sh` — manual heartbeat (for testing; gateway sends in-process)
+- Use Pylon ops to list devices/entities: `ops/list_devices.sh`, `ops/list_entities.sh`, `ops/list_services.sh`
+- `debug/send_heartbeat.sh` — manual heartbeat (for testing; gateway sends in-process every 2 min)
