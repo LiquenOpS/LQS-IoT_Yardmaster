@@ -34,6 +34,14 @@ logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s %(levelname)s %(message
 
 NORTHBOUND_URL = f"http://{IOTA_HOST}:{IOTA_SOUTH_PORT}/iot/json"
 HEARTBEAT_INTERVAL = 120  # seconds
+FIWARE_SERVICE = os.environ.get("FIWARE_SERVICE", "lqs_iot")
+FIWARE_SERVICEPATH = os.environ.get("FIWARE_SERVICEPATH", "/")
+
+_IOTA_HEADERS = {
+    "Content-Type": "application/json",
+    "Fiware-Service": FIWARE_SERVICE,
+    "Fiware-Servicepath": FIWARE_SERVICEPATH,
+}
 
 
 def _build_supported_type():
@@ -58,7 +66,7 @@ def _heartbeat_loop():
                 NORTHBOUND_URL,
                 params={"k": API_KEY, "i": ENTITY_ID},
                 json=payload,
-                headers={"Content-Type": "application/json"},
+                headers=_IOTA_HEADERS,
                 timeout=10,
             )
             log.debug("Heartbeat sent: %s", payload)
@@ -68,10 +76,9 @@ def _heartbeat_loop():
 
 
 def send_northbound_response(resp_data):
-    headers = {"Content-Type": "application/json"}
     params = {"k": API_KEY, "i": ENTITY_ID}
     try:
-        r = requests.post(NORTHBOUND_URL, params=params, headers=headers, data=json.dumps(resp_data), timeout=10)
+        r = requests.post(NORTHBOUND_URL, params=params, headers=_IOTA_HEADERS, data=json.dumps(resp_data), timeout=10)
         r.raise_for_status()
         return r.json()
     except requests.RequestException as e:
