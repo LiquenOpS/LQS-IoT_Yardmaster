@@ -1,9 +1,5 @@
 #!/bin/bash
-
-if [ -z "$DEVICE_ID" ] || [ -z "$DEVICE_NAME" ]; then
-  echo "Error: DEVICE_ID or DEVICE_NAME not set."
-  exit 1
-fi
+# Provision this Yardmaster device with IOTA. Reads from config (YARDMASTER_HOST, etc.).
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [ -f "$ROOT/config/config.env" ] && CONFIG_DIR="$ROOT/config" || CONFIG_DIR="$ROOT"
@@ -12,11 +8,16 @@ source "$CONFIG_DIR/config.env"
 [ -f "$CONFIG_DIR/device.env" ] && source "$CONFIG_DIR/device.env"
 set +a
 
-# supportedType: Signage, LED-strip, or Signage,LED-strip
+if [ -z "$DEVICE_ID" ] || [ -z "$DEVICE_NAME" ]; then
+  echo "Error: DEVICE_ID or DEVICE_NAME not set."
+  exit 1
+fi
+
+# supportedType: Signage, LEDStrip, or Signage,LEDStrip
 SUPPORTED_TYPE=""
 [ "$ENABLE_SIGNAGE" = "true" ] && SUPPORTED_TYPE="Signage"
 [ "$ENABLE_LED_STRIP" = "true" ] && {
-  [ -n "$SUPPORTED_TYPE" ] && SUPPORTED_TYPE="${SUPPORTED_TYPE},LED-strip" || SUPPORTED_TYPE="LED-strip"
+  [ -n "$SUPPORTED_TYPE" ] && SUPPORTED_TYPE="${SUPPORTED_TYPE},LEDStrip" || SUPPORTED_TYPE="LEDStrip"
 }
 
 # Build commands array
@@ -33,6 +34,8 @@ fi
 ATTR_PARTS='{"object_id":"deviceStatus","name":"deviceStatus","type":"Text"},{"object_id":"supportedType","name":"supportedType","type":"Text"}'
 [ "$ENABLE_SIGNAGE" = "true" ] && ATTR_PARTS="${ATTR_PARTS},{\"object_id\":\"displayUrl\",\"name\":\"displayUrl\",\"type\":\"Text\"}"
 
+ENDPOINT="http://${YARDMASTER_HOST}:${YARDMASTER_PORT}/command"
+
 PAYLOAD=$(cat <<EOF
 {
   "devices": [
@@ -43,7 +46,7 @@ PAYLOAD=$(cat <<EOF
       "transport": "HTTP",
       "protocol": "PDI-IoTA-JSON",
       "apikey": "${API_KEY}",
-      "endpoint": "http://${YARDMASTER_HOST}:${YARDMASTER_PORT}/command",
+      "endpoint": "${ENDPOINT}",
       "commands": [ ${CMD_PARTS} ],
       "attributes": [ ${ATTR_PARTS} ]
     }

@@ -8,7 +8,6 @@ import time
 
 from dotenv import load_dotenv
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 _root = os.path.join(os.path.dirname(__file__), "..")
 _config_dir = os.path.join(_root, "config")
@@ -22,6 +21,7 @@ else:
 app = Flask(__name__)
 
 IOTA_HOST = os.environ.get("IOTA_HOST", "localhost")
+LOG_LEVEL = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
 IOTA_SOUTH_PORT = os.environ.get("IOTA_SOUTH_PORT", "7896")
 API_KEY = os.environ.get("API_KEY", "YardmasterKey")
 ENTITY_ID = os.environ.get("DEVICE_ID")
@@ -30,32 +30,55 @@ GLIMMER_BASE_URL = os.environ.get("GLIMMER_BASE_URL", "http://localhost:1129").r
 ENABLE_SIGNAGE = os.environ.get("ENABLE_SIGNAGE", "true").lower() == "true"
 ENABLE_LED_STRIP = os.environ.get("ENABLE_LED_STRIP", "true").lower() == "true"
 
+logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s %(levelname)s %(message)s")
+
 NORTHBOUND_URL = f"http://{IOTA_HOST}:{IOTA_SOUTH_PORT}/iot/json"
 HEARTBEAT_INTERVAL = 120  # seconds
+FIWARE_SERVICE = os.environ.get("FIWARE_SERVICE", "lqs_iot")
+FIWARE_SERVICEPATH = os.environ.get("FIWARE_SERVICEPATH", "/")
+
+_IOTA_HEADERS = {
+    "Content-Type": "application/json",
+    "Fiware-Service": FIWARE_SERVICE,
+    "Fiware-Servicepath": FIWARE_SERVICEPATH,
+}
+
+
+def _build_supported_type():
+    parts = []
+    if ENABLE_SIGNAGE:
+        parts.append("Signage")
+    if ENABLE_LED_STRIP:
+        parts.append("LEDStrip")
+    return ",".join(parts) or ""
 
 
 def _heartbeat_loop():
-    """Send deviceStatus to IOTA South every HEARTBEAT_INTERVAL (service runs in process)."""
+    """Send deviceStatus + supportedType to IOTA South every HEARTBEAT_INTERVAL (service runs in process)."""
     time.sleep(10)  # let server bind first
+    supported_type = _build_supported_type()
     while True:
         try:
+            payload = {"deviceStatus": "online"}
+            if supported_type:
+                payload["supportedType"] = supported_type
             requests.post(
                 NORTHBOUND_URL,
                 params={"k": API_KEY, "i": ENTITY_ID},
-                json={"deviceStatus": "online"},
-                headers={"Content-Type": "application/json"},
+                json=payload,
+                headers=_IOTA_HEADERS,
                 timeout=10,
             )
+            log.debug("Heartbeat sent: %s", payload)
         except Exception as e:
-            print(f"Heartbeat error: {e}")
+            log.error("Heartbeat error: %s", e)
         time.sleep(HEARTBEAT_INTERVAL)
 
 
 def send_northbound_response(resp_data):
-    headers = {"Content-Type": "application/json"}
     params = {"k": API_KEY, "i": ENTITY_ID}
     try:
-        r = requests.post(NORTHBOUND_URL, params=params, headers=headers, data=json.dumps(resp_data), timeout=10)
+        r = requests.post(NORTHBOUND_URL, params=params, headers=_IOTA_HEADERS, data=json.dumps(resp_data), timeout=10)
         r.raise_for_status()
         return r.json()
     except requests.RequestException as e:
@@ -95,7 +118,7 @@ def update_playlist_order(data):
     return r.json() if r.content else {}
 
 
-# ----- LED-strip (Glimmer v2026-02-05) -----
+# ----- LEDStrip (Glimmer v2026-02-05) -----
 def glimmer_post(path, body=None):
     url = f"{GLIMMER_BASE_URL}{path}"
     r = requests.post(url, json=body or {}, headers={"Content-Type": "application/json"}, timeout=10)
@@ -138,26 +161,26 @@ def dispatch_command():
             return jsonify({"error": "Signage not enabled"}), 501
         result = update_playlist_order(data)
 
-    # LED-strip (Glimmer)
+    # LEDStrip (Glimmer)
     elif data.get("ledConfig") is not None:
         if not ENABLE_LED_STRIP:
-            return jsonify({"error": "LED-strip not enabled"}), 501
+            return jsonify({"error": "LEDStrip not enabled"}), 501
         result = glimmer_post("/api/config", data.get("ledConfig"))
     elif data.get("effectSet") is not None:
         if not ENABLE_LED_STRIP:
-            return jsonify({"error": "LED-strip not enabled"}), 501
+            return jsonify({"error": "LEDStrip not enabled"}), 501
         result = glimmer_post("/api/effect/set", data.get("effectSet"))
     elif data.get("playlistResume") is not None:
         if not ENABLE_LED_STRIP:
-            return jsonify({"error": "LED-strip not enabled"}), 501
+            return jsonify({"error": "LEDStrip not enabled"}), 501
         result = glimmer_post("/api/playlist/resume")
     elif data.get("playlistAdd") is not None:
         if not ENABLE_LED_STRIP:
-            return jsonify({"error": "LED-strip not enabled"}), 501
+            return jsonify({"error": "LEDStrip not enabled"}), 501
         result = glimmer_post("/api/playlist/add", data.get("playlistAdd"))
     elif data.get("playlistRemove") is not None:
         if not ENABLE_LED_STRIP:
-            return jsonify({"error": "LED-strip not enabled"}), 501
+            return jsonify({"error": "LEDStrip not enabled"}), 501
         result = glimmer_post("/api/playlist/remove", data.get("playlistRemove"))
 
     if result is None:
