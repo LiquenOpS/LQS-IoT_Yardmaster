@@ -13,8 +13,17 @@ if [ -z "$DEVICE_ID" ]; then
   exit 1
 fi
 
+# Build supportedType from ENABLE_SIGNAGE / ENABLE_LED_STRIP
+SUPPORTED_TYPE=""
+[ "${ENABLE_SIGNAGE}" = "true" ] && SUPPORTED_TYPE="Signage"
+[ "${ENABLE_LED_STRIP}" = "true" ] && {
+  [ -n "$SUPPORTED_TYPE" ] && SUPPORTED_TYPE="${SUPPORTED_TYPE},LEDStrip" || SUPPORTED_TYPE="LEDStrip"
+}
+PAYLOAD='{"deviceStatus":"online"}'
+[ -n "$SUPPORTED_TYPE" ] && PAYLOAD="{\"deviceStatus\":\"online\",\"supportedType\":\"${SUPPORTED_TYPE}\"}"
+
 curl -s -X POST "http://${IOTA_HOST}:${IOTA_SOUTH_PORT}/iot/json?k=${API_KEY}&i=${DEVICE_ID}" \
   -H "${HEADER_CONTENT_TYPE}" \
-  --data-raw '{"deviceStatus":"online"}'
+  --data-raw "$PAYLOAD"
 
 echo ""

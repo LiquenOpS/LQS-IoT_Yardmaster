@@ -34,15 +34,28 @@ NORTHBOUND_URL = f"http://{IOTA_HOST}:{IOTA_SOUTH_PORT}/iot/json"
 HEARTBEAT_INTERVAL = 120  # seconds
 
 
+def _build_supported_type():
+    parts = []
+    if ENABLE_SIGNAGE:
+        parts.append("Signage")
+    if ENABLE_LED_STRIP:
+        parts.append("LEDStrip")
+    return ",".join(parts) or ""
+
+
 def _heartbeat_loop():
-    """Send deviceStatus to IOTA South every HEARTBEAT_INTERVAL (service runs in process)."""
+    """Send deviceStatus + supportedType to IOTA South every HEARTBEAT_INTERVAL (service runs in process)."""
     time.sleep(10)  # let server bind first
+    supported_type = _build_supported_type()
     while True:
         try:
+            payload = {"deviceStatus": "online"}
+            if supported_type:
+                payload["supportedType"] = supported_type
             requests.post(
                 NORTHBOUND_URL,
                 params={"k": API_KEY, "i": ENTITY_ID},
-                json={"deviceStatus": "online"},
+                json=payload,
                 headers={"Content-Type": "application/json"},
                 timeout=10,
             )
