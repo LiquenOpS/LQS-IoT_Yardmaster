@@ -22,10 +22,15 @@ SUPPORTED_TYPE=""
 PAYLOAD='{"deviceStatus":"online"}'
 [ -n "$SUPPORTED_TYPE" ] && PAYLOAD="{\"deviceStatus\":\"online\",\"supportedType\":\"${SUPPORTED_TYPE}\"}"
 
-curl -s -X POST "http://${IOTA_HOST}:${IOTA_SOUTH_PORT}/iot/json?k=${API_KEY}&i=${DEVICE_ID}" \
+HTTP_CODE=$(curl -s -o /tmp/send_heartbeat_resp -w "%{http_code}" -X POST \
+  "http://${IOTA_HOST}:${IOTA_SOUTH_PORT}/iot/json?k=${API_KEY}&i=${DEVICE_ID}" \
   -H "${HEADER_CONTENT_TYPE}" \
   -H "${HEADER_FIWARE_SERVICE}" \
   -H "${HEADER_FIWARE_SERVICEPATH}" \
-  --data-raw "$PAYLOAD"
-
-echo ""
+  --data-raw "$PAYLOAD")
+if [[ "$HTTP_CODE" =~ ^(200|204)$ ]]; then
+  echo "OK (HTTP $HTTP_CODE)"
+else
+  echo "Failed (HTTP $HTTP_CODE): $(cat /tmp/send_heartbeat_resp 2>/dev/null)"
+  exit 1
+fi
