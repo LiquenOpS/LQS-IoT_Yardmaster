@@ -1,6 +1,6 @@
 # LQS-IoT Yardmaster
 
-Single FIWARE device (entity type **Yardmaster**) that can expose **Signage** (anthias) and/or **LED-strip** (Glimmer) capabilities. One endpoint, one entity, attributes in camelCase (`deviceStatus`, `supportedType`, `displayUrl`).
+Single FIWARE device (entity type **Yardmaster**) that can expose **Signage** (anthias) and/or **LEDStrip** (Glimmer) capabilities. One endpoint, one entity, attributes in camelCase (`deviceStatus`, `supportedType`, `displayUrl`).
 
 ## Setup
 
@@ -8,7 +8,7 @@ Single FIWARE device (entity type **Yardmaster**) that can expose **Signage** (a
    - Create `.venv`, install deps from `requirements.txt` (Python 3.10+).
    - Create `config/` from `config.example` if missing (gitignored);
    - Prompt for Device ID / Device Name (defaults: yardmaster-01, Yardmaster-01).
-   - On first run: prompt Enable Signage? / Enable LED-strip? and write to config.
+   - On first run: prompt Enable Signage? / Enable LEDStrip? and write to config.
    - Ask whether to edit `config/config.env` for IOTA host, URLs, etc. (optional).
    - Provision the device with FIWARE. Heartbeat (deviceStatus) is sent by the gateway service every 2 min.
 2. Start the command gateway:
@@ -22,9 +22,9 @@ Single FIWARE device (entity type **Yardmaster**) that can expose **Signage** (a
 
 - **Entity type:** `Yardmaster`
 - **Attributes:** `deviceStatus`, `supportedType`, `displayUrl` (when Signage enabled)
-- **Commands:** Signage — `listAssets`, `createAsset`, `deleteAsset`, `updatePlaylistOrder`, `updateAssetPatch`. LED-strip — `ledConfig`, `effectSet`, `playlistResume`, `playlistAdd`, `playlistRemove` (Glimmer v2026-02-05 API).
+- **Commands:** Signage — `listAssets`, `createAsset`, `deleteAsset`, `updatePlaylistOrder`, `updateAssetPatch`. LEDStrip — `ledConfig`, `effectSet`, `playlistResume`, `playlistAdd`, `playlistRemove` (Glimmer v2026-02-05 API).
 
-## Glimmer (LED-strip)
+## Glimmer (LEDStrip)
 
 - `ledConfig` → `POST {GLIMMER_BASE_URL}/api/config` (new config structure: `runtime.effects_playlist`, `effects.rainbow`, etc.)
 - `effectSet` → `POST /api/effect/set`

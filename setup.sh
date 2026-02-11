@@ -11,11 +11,9 @@ echo "Yardmaster setup — what would you like to do?"
 echo "  1) Install essentials (config, device info, venv)"
 echo "  2) Provision (register device with IOTA)"
 echo "  3) Install systemd (start on boot)"
-echo "  4) Register to Discovery (Manual→Adopt bridge: push to Discovery, then Adopt in Odoo)"
-echo "  5) Provision from Discovery (Discovery→Manual: fetch endpoint from Discovery, then provision)"
-echo "  6) Exit"
+echo "  4) Exit"
 echo ""
-read -p "Choice [1-6]: " CHOICE
+read -p "Choice [1-4]: " CHOICE
 
 case "$CHOICE" in
   1)
@@ -46,7 +44,7 @@ case "$CHOICE" in
       echo ""
       read -p "Enable Signage (anthias)? [Y/n]: " Y
       ENABLE_SIGNAGE=true; [[ "$Y" =~ ^[nN] ]] && ENABLE_SIGNAGE=false
-      read -p "Enable LED-strip (Glimmer)? [Y/n]: " Y
+      read -p "Enable LEDStrip (Glimmer)? [Y/n]: " Y
       ENABLE_LED_STRIP=true; [[ "$Y" =~ ^[nN] ]] && ENABLE_LED_STRIP=false
       sed -i "s/^ENABLE_SIGNAGE=.*/ENABLE_SIGNAGE=${ENABLE_SIGNAGE}/" "$CONFIG_DIR/config.env"
       sed -i "s/^ENABLE_LED_STRIP=.*/ENABLE_LED_STRIP=${ENABLE_LED_STRIP}/" "$CONFIG_DIR/config.env"
@@ -54,6 +52,8 @@ case "$CHOICE" in
 
     read -p "Edit config/config.env for IOTA/URLs now? [y/N]: " EDIT
     [[ "$EDIT" =~ ^[yY] ]] && "${EDITOR:-nano}" "$CONFIG_DIR/config.env"
+    echo ""
+    echo "  Important: set IOTA_HOST (where Pylon runs), YARDMASTER_HOST (this unit's address), YARDMASTER_PORT."
 
     # ---- Venv ----
     if [ ! -x "$ROOT/.venv/bin/python3" ]; then
@@ -68,7 +68,7 @@ case "$CHOICE" in
     fi
 
     chmod +x "$ROOT/run.sh"
-    echo "Done. Use option 2 to provision (requires Pylon running)."
+    echo "Done. Use option 2 to Provision (requires Pylon running)."
     ;;
   2)
     [ ! -f "$CONFIG_DIR/config.env" ] && { echo "Error: config/config.env not found. Run option 1 first." >&2; exit 1; }
@@ -78,9 +78,10 @@ case "$CHOICE" in
     source "$CONFIG_DIR/device.env"
     set +a
     echo ""
-    echo "==> Provisioning device..."
+    echo "==> Provisioning device with IOTA..."
+    echo "    (IOTA must be running at ${IOTA_HOST:-localhost}:${IOTA_NORTH_PORT:-4041})"
     bash "$ROOT/ops/provision_device.sh"
-    echo "Done."
+    echo "Done. If status 200/201, device is registered. It will appear in Odoo after first heartbeat."
     ;;
   3)
     chmod +x "$ROOT/run.sh"
@@ -95,20 +96,6 @@ case "$CHOICE" in
     fi
     ;;
   4)
-    [ ! -f "$CONFIG_DIR/config.env" ] && { echo "Error: config/config.env not found. Run option 1 first." >&2; exit 1; }
-    [ ! -f "$CONFIG_DIR/device.env" ] && { echo "Error: config/device.env not found. Run option 1 first." >&2; exit 1; }
-    bash "$ROOT/ops/register_to_discovery.sh"
-    ;;
-  5)
-    [ ! -f "$CONFIG_DIR/config.env" ] && { echo "Error: config/config.env not found. Run option 1 first." >&2; exit 1; }
-    [ ! -f "$CONFIG_DIR/device.env" ] && { echo "Error: config/device.env not found. Run option 1 first." >&2; exit 1; }
-    set -a
-    source "$CONFIG_DIR/config.env"
-    source "$CONFIG_DIR/device.env"
-    set +a
-    bash "$ROOT/ops/provision_device.sh" --from-discovery
-    ;;
-  6)
     echo "Bye."
     ;;
   *)

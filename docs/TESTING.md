@@ -1,6 +1,6 @@
 # Deployment Testing
 
-Quick smoke test for Yardmaster → Glimmer (LED-strip) without Pylon/Odoo.
+Quick smoke test for Yardmaster → Glimmer (LEDStrip) without Pylon/Odoo.
 
 ## Prerequisites
 
