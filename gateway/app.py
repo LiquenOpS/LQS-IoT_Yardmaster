@@ -8,7 +8,6 @@ import time
 
 from dotenv import load_dotenv
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 _root = os.path.join(os.path.dirname(__file__), "..")
 _config_dir = os.path.join(_root, "config")
@@ -22,6 +21,7 @@ else:
 app = Flask(__name__)
 
 IOTA_HOST = os.environ.get("IOTA_HOST", "localhost")
+LOG_LEVEL = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
 IOTA_SOUTH_PORT = os.environ.get("IOTA_SOUTH_PORT", "7896")
 API_KEY = os.environ.get("API_KEY", "YardmasterKey")
 ENTITY_ID = os.environ.get("DEVICE_ID")
@@ -29,6 +29,8 @@ ANTHIAS_BASE_URL = os.environ.get("ANTHIAS_BASE_URL", "http://localhost:8000/api
 GLIMMER_BASE_URL = os.environ.get("GLIMMER_BASE_URL", "http://localhost:1129").rstrip("/")
 ENABLE_SIGNAGE = os.environ.get("ENABLE_SIGNAGE", "true").lower() == "true"
 ENABLE_LED_STRIP = os.environ.get("ENABLE_LED_STRIP", "true").lower() == "true"
+
+logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s %(levelname)s %(message)s")
 
 NORTHBOUND_URL = f"http://{IOTA_HOST}:{IOTA_SOUTH_PORT}/iot/json"
 HEARTBEAT_INTERVAL = 120  # seconds
@@ -59,8 +61,9 @@ def _heartbeat_loop():
                 headers={"Content-Type": "application/json"},
                 timeout=10,
             )
+            log.debug("Heartbeat sent: %s", payload)
         except Exception as e:
-            print(f"Heartbeat error: {e}")
+            log.error("Heartbeat error: %s", e)
         time.sleep(HEARTBEAT_INTERVAL)
 
 
