@@ -24,6 +24,8 @@ PAYLOAD='{"deviceStatus":"online"}'
 
 curl -s -X POST "http://${IOTA_HOST}:${IOTA_SOUTH_PORT}/iot/json?k=${API_KEY}&i=${DEVICE_ID}" \
   -H "${HEADER_CONTENT_TYPE}" \
+  -H "${HEADER_FIWARE_SERVICE}" \
+  -H "${HEADER_FIWARE_SERVICEPATH}" \
   --data-raw "$PAYLOAD"
 
 echo ""
