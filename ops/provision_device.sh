@@ -33,6 +33,7 @@ fi
 # Build attributes array (camelCase)
 ATTR_PARTS='{"object_id":"deviceStatus","name":"deviceStatus","type":"Text"},{"object_id":"supportedType","name":"supportedType","type":"Text"}'
 [ "$ENABLE_SIGNAGE" = "true" ] && ATTR_PARTS="${ATTR_PARTS},{\"object_id\":\"displayUrl\",\"name\":\"displayUrl\",\"type\":\"Text\"}"
+[ "$ENABLE_LED_STRIP" = "true" ] && ATTR_PARTS="${ATTR_PARTS},{\"object_id\":\"supportedEffects\",\"name\":\"supportedEffects\",\"type\":\"Text\"}"
 
 ENDPOINT="http://${YARDMASTER_HOST}:${YARDMASTER_PORT}/command"
 
