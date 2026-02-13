@@ -33,7 +33,9 @@ ENABLE_LED_STRIP = os.environ.get("ENABLE_LED_STRIP", "true").lower() == "true"
 logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s %(levelname)s %(message)s")
 
 NORTHBOUND_URL = f"http://{IOTA_HOST}:{IOTA_SOUTH_PORT}/iot/json"
-HEARTBEAT_INTERVAL = 120  # seconds
+HEARTBEAT_INTERVAL = 120  # seconds (when adopted)
+RETRY_INTERVAL = 30  # seconds (when not adopted)
+ADOPT_STATE_FILE = os.path.join(_config_dir, "adopt_state.json")
 FIWARE_SERVICE = os.environ.get("FIWARE_SERVICE", "lqs_iot")
 FIWARE_SERVICEPATH = os.environ.get("FIWARE_SERVICEPATH", "/")
 
@@ -42,6 +44,28 @@ _IOTA_HEADERS = {
     "Fiware-Service": FIWARE_SERVICE,
     "Fiware-Servicepath": FIWARE_SERVICEPATH,
 }
+
+
+def _load_adopted():
+    """Load adopted state from file. Default False."""
+    try:
+        if os.path.isfile(ADOPT_STATE_FILE):
+            with open(ADOPT_STATE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return bool(data.get("adopted", False))
+    except Exception as e:
+        log.warning("Could not load adopt state: %s", e)
+    return False
+
+
+def _save_adopted(adopted):
+    """Persist adopted state to file."""
+    try:
+        os.makedirs(os.path.dirname(ADOPT_STATE_FILE), exist_ok=True)
+        with open(ADOPT_STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump({"adopted": adopted}, f, indent=2)
+    except Exception as e:
+        log.error("Could not save adopt state: %s", e)
 
 
 def _build_supported_type():
@@ -71,47 +95,58 @@ def _fetch_glimmer_supported_effects():
     return None
 
 
-def _send_static_attrs_once():
-    """Send static attributes (supportedType, supportedEffects) once at startup. Not sent every heartbeat."""
-    payload = {"deviceStatus": "online"}
-    supported_type = _build_supported_type()
-    if supported_type:
-        payload["supportedType"] = supported_type
+def _send_type_specific_attrs_and_notify():
+    """Fetch type-specific attrs (e.g. supportedEffects) and send to IOTA."""
+    payload = {"deviceStatus": "online", "adopted": True}
     if ENABLE_LED_STRIP:
         effects = _fetch_glimmer_supported_effects()
         if effects:
             payload["supportedEffects"] = effects
     try:
-        requests.post(
+        r = requests.post(
             NORTHBOUND_URL,
             params={"k": API_KEY, "i": ENTITY_ID},
             json=payload,
             headers=_IOTA_HEADERS,
             timeout=10,
         )
-        log.info("Static attrs sent once: supportedType=%s, supportedEffects=%s",
-                 supported_type, "..." if payload.get("supportedEffects") else "n/a")
+        r.raise_for_status()
+        log.info("Type-specific attrs sent (supportedEffects=%s)", "..." if payload.get("supportedEffects") else "n/a")
     except Exception as e:
-        log.error("Static attrs send error: %s", e)
+        log.warning("Could not send type-specific attrs: %s", e)
+
+
+# Adopted state: persisted, loaded on startup
+_adopted = _load_adopted()
 
 
 def _heartbeat_loop():
-    """Send deviceStatus only to IOTA South every HEARTBEAT_INTERVAL (static attrs sent once at startup)."""
+    """Send measures to IOTA. Not adopted: supportedType + adopted:false every 30s. Adopted: adopted:true every 2 min."""
+    global _adopted
     time.sleep(10)  # let server bind first
-    _send_static_attrs_once()
     while True:
         try:
+            if _adopted:
+                payload = {"deviceStatus": "online", "adopted": True}
+                interval = HEARTBEAT_INTERVAL
+                log.debug("Heartbeat sent: deviceStatus=online, adopted=true")
+            else:
+                payload = {"deviceStatus": "online", "adopted": False}
+                supported_type = _build_supported_type()
+                if supported_type:
+                    payload["supportedType"] = supported_type
+                interval = RETRY_INTERVAL
+                log.debug("Heartbeat sent: deviceStatus, supportedType, adopted=false")
             requests.post(
                 NORTHBOUND_URL,
                 params={"k": API_KEY, "i": ENTITY_ID},
-                json={"deviceStatus": "online"},
+                json=payload,
                 headers=_IOTA_HEADERS,
                 timeout=10,
             )
-            log.debug("Heartbeat sent: deviceStatus=online")
         except Exception as e:
             log.error("Heartbeat error: %s", e)
-        time.sleep(HEARTBEAT_INTERVAL)
+        time.sleep(interval)
 
 
 def send_northbound_response(resp_data):
@@ -167,6 +202,22 @@ def glimmer_post(path, body=None):
         return {"status_code": r.status_code, "text": r.text}
 
 
+def _handle_set_adopted(data):
+    """Handle setAdopted command. Value: true or false."""
+    global _adopted
+    cmd = data.get("setAdopted")
+    if cmd is None:
+        return None
+    val = cmd.get("value") if isinstance(cmd, dict) else cmd
+    adopted = str(val).lower() in ("true", "1", "yes")
+    _adopted = adopted
+    _save_adopted(adopted)
+    log.info("setAdopted: %s (persisted)", adopted)
+    if adopted:
+        _send_type_specific_attrs_and_notify()
+    return {"status": "ok", "adopted": adopted}
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"}), 200
@@ -178,8 +229,12 @@ def dispatch_command():
     log.info("Command received: %s", list(data.keys()) if data else "empty")
     result = None
 
+    # setAdopted (must run before other handlers to update _adopted for heartbeat)
+    if data.get("setAdopted") is not None:
+        result = _handle_set_adopted(data)
+
     # Signage
-    if data.get("listAssets") is not None:
+    elif data.get("listAssets") is not None:
         if not ENABLE_SIGNAGE:
             return jsonify({"error": "Signage not enabled"}), 501
         result = list_assets(data)

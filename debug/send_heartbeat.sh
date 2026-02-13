@@ -13,7 +13,7 @@ if [ -z "$DEVICE_ID" ]; then
   exit 1
 fi
 
-# Heartbeat sends deviceStatus only. Static attrs (supportedType, supportedEffects) are sent once at Yardmaster startup.
+# Manual heartbeat (deviceStatus only). Yardmaster gateway sends full payload (adopted, supportedType when not adopted).
 PAYLOAD='{"deviceStatus":"online"}'
 
 HTTP_CODE=$(curl -s -o /tmp/send_heartbeat_resp -w "%{http_code}" -X POST \
