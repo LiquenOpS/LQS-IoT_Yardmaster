@@ -53,23 +53,62 @@ def _build_supported_type():
     return ",".join(parts) or ""
 
 
-def _heartbeat_loop():
-    """Send deviceStatus + supportedType to IOTA South every HEARTBEAT_INTERVAL (service runs in process)."""
-    time.sleep(10)  # let server bind first
+def _fetch_glimmer_supported_effects():
+    """Fetch supported_effects from Glimmer GET /api/config. Returns comma-separated string or None."""
+    try:
+        r = requests.get(
+            f"{GLIMMER_BASE_URL}/api/config",
+            headers={"Content-Type": "application/json"},
+            timeout=5,
+        )
+        r.raise_for_status()
+        data = r.json()
+        effects = data.get("hardware", {}).get("supported_effects")
+        if isinstance(effects, list) and effects:
+            return ",".join(str(e) for e in effects)
+    except Exception as e:
+        log.warning("Could not fetch Glimmer supported_effects: %s", e)
+    return None
+
+
+def _send_static_attrs_once():
+    """Send static attributes (supportedType, supportedEffects) once at startup. Not sent every heartbeat."""
+    payload = {"deviceStatus": "online"}
     supported_type = _build_supported_type()
+    if supported_type:
+        payload["supportedType"] = supported_type
+    if ENABLE_LED_STRIP:
+        effects = _fetch_glimmer_supported_effects()
+        if effects:
+            payload["supportedEffects"] = effects
+    try:
+        requests.post(
+            NORTHBOUND_URL,
+            params={"k": API_KEY, "i": ENTITY_ID},
+            json=payload,
+            headers=_IOTA_HEADERS,
+            timeout=10,
+        )
+        log.info("Static attrs sent once: supportedType=%s, supportedEffects=%s",
+                 supported_type, "..." if payload.get("supportedEffects") else "n/a")
+    except Exception as e:
+        log.error("Static attrs send error: %s", e)
+
+
+def _heartbeat_loop():
+    """Send deviceStatus only to IOTA South every HEARTBEAT_INTERVAL (static attrs sent once at startup)."""
+    time.sleep(10)  # let server bind first
+    _send_static_attrs_once()
     while True:
         try:
-            payload = {"deviceStatus": "online"}
-            if supported_type:
-                payload["supportedType"] = supported_type
             requests.post(
                 NORTHBOUND_URL,
                 params={"k": API_KEY, "i": ENTITY_ID},
-                json=payload,
+                json={"deviceStatus": "online"},
                 headers=_IOTA_HEADERS,
                 timeout=10,
             )
-            log.debug("Heartbeat sent: %s", payload)
+            log.debug("Heartbeat sent: deviceStatus=online")
         except Exception as e:
             log.error("Heartbeat error: %s", e)
         time.sleep(HEARTBEAT_INTERVAL)

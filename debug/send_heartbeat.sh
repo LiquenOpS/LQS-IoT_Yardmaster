@@ -13,14 +13,8 @@ if [ -z "$DEVICE_ID" ]; then
   exit 1
 fi
 
-# Build supportedType from ENABLE_SIGNAGE / ENABLE_LED_STRIP
-SUPPORTED_TYPE=""
-[ "${ENABLE_SIGNAGE}" = "true" ] && SUPPORTED_TYPE="Signage"
-[ "${ENABLE_LED_STRIP}" = "true" ] && {
-  [ -n "$SUPPORTED_TYPE" ] && SUPPORTED_TYPE="${SUPPORTED_TYPE},LEDStrip" || SUPPORTED_TYPE="LEDStrip"
-}
+# Heartbeat sends deviceStatus only. Static attrs (supportedType, supportedEffects) are sent once at Yardmaster startup.
 PAYLOAD='{"deviceStatus":"online"}'
-[ -n "$SUPPORTED_TYPE" ] && PAYLOAD="{\"deviceStatus\":\"online\",\"supportedType\":\"${SUPPORTED_TYPE}\"}"
 
 HTTP_CODE=$(curl -s -o /tmp/send_heartbeat_resp -w "%{http_code}" -X POST \
   "http://${IOTA_HOST}:${IOTA_SOUTH_PORT}/iot/json?k=${API_KEY}&i=${DEVICE_ID}" \
