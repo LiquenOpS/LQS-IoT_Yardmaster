@@ -202,6 +202,27 @@ def glimmer_post(path, body=None):
         return {"status_code": r.status_code, "text": r.text}
 
 
+def _send_unadopted_state_and_notify():
+    """Send adopted=false + supportedType to IOTA immediately (so Odoo syncs without waiting for heartbeat)."""
+    payload = {
+        "deviceStatus": "online",
+        "adopted": False,
+        "supportedType": _build_supported_type(),
+    }
+    try:
+        r = requests.post(
+            NORTHBOUND_URL,
+            params={"k": API_KEY, "i": ENTITY_ID},
+            json=payload,
+            headers=_IOTA_HEADERS,
+            timeout=10,
+        )
+        r.raise_for_status()
+        log.info("Unadopted state sent to IOTA (adopted=false, supportedType)")
+    except Exception as e:
+        log.warning("Could not send unadopted state: %s", e)
+
+
 def _handle_set_adopted(data):
     """Handle setAdopted command. Value: true or false."""
     global _adopted
@@ -215,6 +236,8 @@ def _handle_set_adopted(data):
     log.info("setAdopted: %s (persisted)", adopted)
     if adopted:
         _send_type_specific_attrs_and_notify()
+    else:
+        _send_unadopted_state_and_notify()
     return {"status": "ok", "adopted": adopted}
 
 
