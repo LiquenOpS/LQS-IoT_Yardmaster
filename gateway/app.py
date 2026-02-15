@@ -404,21 +404,21 @@ def dispatch_command():
 
     cmd_name = _command_name_from_data(data)
     resp = dict(result) if isinstance(result, dict) else {}
+    result_str = ""
     if cmd_name:
         ok = (
             resp.get("status") in ("success", "ok")
             or (cmd_name == "createAsset" and resp.get("asset_id"))
         ) and "error" not in str(resp.get("detail", ""))
-        resp[f"{cmd_name}_status"] = "OK" if ok else "ERROR"
         parts = [str(resp.get("detail", ""))] if resp.get("detail") else []
         if resp.get("asset_id"):
             parts.append(f"asset_id={resp['asset_id']}")
-        resp[f"{cmd_name}_info"] = " | ".join(parts) if parts else str(resp)[:200]
-        # FIWARE IOTA expects command name as key, result string as value (for Orion update)
-        if cmd_name == "createAsset" and resp.get("asset_id"):
-            resp[cmd_name] = f"asset_id={resp['asset_id']}"
+        result_str = " | ".join(parts) if parts else json.dumps(resp)[:200]
     log.info("Command dispatched, result keys: %s", list(result.keys()) if isinstance(result, dict) else str(result)[:80])
-    return jsonify(resp)
+    # IOTA updateCommand iterates Object.keys(body) and calls setCommandResult for EACH key.
+    # It expects ONLY {commandName: resultString}. Extra keys (asset_id, name, etc.) cause failures.
+    iota_body = {cmd_name: result_str} if cmd_name and result_str else {}
+    return jsonify(iota_body)
 
 
 # Start heartbeat thread (daemon so it exits with the process)
