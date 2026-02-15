@@ -32,8 +32,8 @@ fi
 # setAdopted: Odoo sends on adopt/unadopt; Yardmaster persists and reports adopted attr
 [ -n "$CMD_PARTS" ] && CMD_PARTS="${CMD_PARTS},{\"name\":\"setAdopted\",\"type\":\"command\"}" || CMD_PARTS='{"name":"setAdopted","type":"command"}'
 
-# Build attributes array (camelCase)
-ATTR_PARTS='{"object_id":"deviceStatus","name":"deviceStatus","type":"Text"},{"object_id":"supportedType","name":"supportedType","type":"Text"},{"object_id":"adopted","name":"adopted","type":"Text"}'
+# Build attributes array (camelCase). lastCommandResult = northbound feedback for Odoo (status, detail, asset_id)
+ATTR_PARTS='{"object_id":"deviceStatus","name":"deviceStatus","type":"Text"},{"object_id":"supportedType","name":"supportedType","type":"Text"},{"object_id":"adopted","name":"adopted","type":"Text"},{"object_id":"lastCommandResult","name":"lastCommandResult","type":"Text"}'
 [ "$ENABLE_SIGNAGE" = "true" ] && ATTR_PARTS="${ATTR_PARTS},{\"object_id\":\"displayUrl\",\"name\":\"displayUrl\",\"type\":\"Text\"}"
 [ "$ENABLE_LED_STRIP" = "true" ] && ATTR_PARTS="${ATTR_PARTS},{\"object_id\":\"supportedEffects\",\"name\":\"supportedEffects\",\"type\":\"Text\"}"
 
