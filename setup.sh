@@ -40,10 +40,27 @@ case "$CHOICE" in
     # ---- Device ID / Name ----
     if [ ! -f "$CONFIG_DIR/device.env" ]; then
       echo ""
-      read -p "Device ID [yardmaster-01]: " DEVICE_ID
-      DEVICE_ID="${DEVICE_ID:-yardmaster-01}"
-      read -p "Device Name [Yardmaster-01]: " DEVICE_NAME
-      DEVICE_NAME="${DEVICE_NAME:-Yardmaster-01}"
+      # Default from MAC (last 6 hex chars). Skip virtual: lo, docker, veth, br-, virbr, tun, tap
+      # Physical: eth*, eno*, enp*, ens*, enx*, wlan*, wlp*, wls*
+      _mac_default=""
+      if [ -d /sys/class/net ]; then
+        _netdir="/sys/class/net"
+        for _iface in "$_netdir"/*/; do
+          _iface=$(basename "$_iface")
+          [[ "$_iface" == lo ]] || [[ "$_iface" == docker* ]] || [[ "$_iface" == veth* ]] || \
+          [[ "$_iface" == br-* ]] || [[ "$_iface" == virbr* ]] || [[ "$_iface" == tun* ]] || [[ "$_iface" == tap* ]] && continue
+          [ -f "$_netdir/$_iface/address" ] || continue
+          _mac=$(cat "$_netdir/$_iface/address" 2>/dev/null | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          [ -n "$_mac" ] && [ "${#_mac}" -ge 6 ] && _mac_default="${_mac: -6}" && break
+        done
+      fi
+      [ -z "$_mac_default" ] && _mac_default="01"
+      _default_id="yardmaster-${_mac_default}"
+      _default_name="Yardmaster-${_mac_default}"
+      read -p "Device ID [${_default_id}]: " DEVICE_ID
+      DEVICE_ID="${DEVICE_ID:-$_default_id}"
+      read -p "Device Name [${_default_name}]: " DEVICE_NAME
+      DEVICE_NAME="${DEVICE_NAME:-$_default_name}"
       echo "export DEVICE_ID=${DEVICE_ID}" > "$CONFIG_DIR/device.env"
       echo "export DEVICE_NAME=${DEVICE_NAME}" >> "$CONFIG_DIR/device.env"
       echo "  -> config/device.env saved."
