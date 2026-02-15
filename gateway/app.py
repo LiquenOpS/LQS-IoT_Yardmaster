@@ -232,6 +232,8 @@ def update_asset_patch(data):
         asset = raw.get("value", raw) if isinstance(raw, dict) else {}
         asset = dict(asset) if isinstance(asset, dict) else {}
         asset_id = asset.get("asset_id")
+        if not asset_id:
+            return {"status": "error", "detail": "asset_id is required (Odoo record may have no anthias_id; create may have failed)"}
         # #region agent log
         _debug_log("H1,H5", "update_asset_patch request", {"url": f"{ANTHIAS_BASE_URL}/{asset_id}", "asset_id": asset_id, "asset_keys": list(asset.keys()), "raw_data_keys": list(data.keys())})
         # #endregion
