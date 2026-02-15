@@ -161,35 +161,79 @@ def send_northbound_response(resp_data):
 
 
 # ----- Signage (anthias) -----
+def _anthias_resp(r, fallback=None):
+    """Parse Anthias response; on HTTP error return dict with status/detail for Odoo feedback."""
+    try:
+        body = r.json() if r.content else {}
+    except Exception:
+        body = {}
+    if r.ok:
+        return body
+    detail = body.get("detail") or body.get("message") or body.get("error") or r.text[:200] or f"HTTP {r.status_code}"
+    return {"status": "error", "detail": str(detail), "http_status": r.status_code}
+
+
 def list_assets(data):
-    r = requests.get(f"{ANTHIAS_BASE_URL}/", headers={"Content-Type": "application/json"}, timeout=10)
-    return r.json()
+    try:
+        r = requests.get(f"{ANTHIAS_BASE_URL}/", headers={"Content-Type": "application/json"}, timeout=10)
+        return _anthias_resp(r)
+    except requests.RequestException as e:
+        return {"status": "error", "detail": str(e)}
+
 
 def create_asset(data):
-    asset = data.get("createAsset", {})
-    asset["skip_asset_check"] = False
-    r = requests.post(f"{ANTHIAS_BASE_URL}", json=asset, headers={"Content-Type": "application/json"}, timeout=10)
-    return r.json()
+    try:
+        raw = data.get("createAsset", {})
+        asset = raw.get("value", raw) if isinstance(raw, dict) else {}
+        asset = dict(asset) if isinstance(asset, dict) else {}
+        asset["skip_asset_check"] = False
+        r = requests.post(f"{ANTHIAS_BASE_URL}", json=asset, headers={"Content-Type": "application/json"}, timeout=10)
+        out = _anthias_resp(r)
+        if r.ok and isinstance(out, dict) and "asset_id" not in out and "id" in out:
+            out["asset_id"] = out["id"]
+        return out
+    except requests.RequestException as e:
+        return {"status": "error", "detail": str(e)}
+
 
 def update_asset_patch(data):
-    asset = data.get("updateAssetPatch", {})
-    asset_id = asset.get("asset_id")
-    r = requests.patch(f"{ANTHIAS_BASE_URL}/{asset_id}", json=asset, headers={"Content-Type": "application/json"}, timeout=10)
-    return r.json()
+    try:
+        raw = data.get("updateAssetPatch", {})
+        asset = raw.get("value", raw) if isinstance(raw, dict) else {}
+        asset = dict(asset) if isinstance(asset, dict) else {}
+        asset_id = asset.get("asset_id")
+        r = requests.patch(f"{ANTHIAS_BASE_URL}/{asset_id}", json=asset, headers={"Content-Type": "application/json"}, timeout=10)
+        if r.status_code == 204:
+            return {"status": "success", "asset_id": asset_id}
+        return _anthias_resp(r)
+    except requests.RequestException as e:
+        return {"status": "error", "detail": str(e)}
+
 
 def delete_asset(data):
-    payload = data.get("deleteAsset", {})
-    asset_id = payload.get("asset_id")
-    r = requests.delete(f"{ANTHIAS_BASE_URL}/{asset_id}", headers={"Content-Type": "application/json"}, timeout=10)
-    if r.status_code == 204:
-        return {"status": "success", "asset_id": asset_id, "message": "Deleted successfully."}
-    return r.json() if r.content else {}
+    try:
+        raw = data.get("deleteAsset", {})
+        payload = raw.get("value", raw) if isinstance(raw, dict) else {}
+        payload = dict(payload) if isinstance(payload, dict) else {}
+        asset_id = payload.get("asset_id")
+        r = requests.delete(f"{ANTHIAS_BASE_URL}/{asset_id}", headers={"Content-Type": "application/json"}, timeout=10)
+        if r.status_code == 204:
+            return {"status": "success", "asset_id": asset_id, "message": "Deleted successfully."}
+        return _anthias_resp(r)
+    except requests.RequestException as e:
+        return {"status": "error", "detail": str(e)}
+
 
 def update_playlist_order(data):
-    r = requests.post(f"{ANTHIAS_BASE_URL}/order", json=data.get("updatePlaylistOrder", {}), headers={"Content-Type": "application/json"}, timeout=10)
-    if r.status_code == 204:
-        return {"status": "success", "message": "Updated successfully."}
-    return r.json() if r.content else {}
+    try:
+        raw = data.get("updatePlaylistOrder", {})
+        payload = raw.get("value", raw) if isinstance(raw, dict) else raw or {}
+        r = requests.post(f"{ANTHIAS_BASE_URL}/order", json=payload, headers={"Content-Type": "application/json"}, timeout=10)
+        if r.status_code == 204:
+            return {"status": "success", "message": "Updated successfully."}
+        return _anthias_resp(r)
+    except requests.RequestException as e:
+        return {"status": "error", "detail": str(e)}
 
 
 # ----- LEDStrip (Glimmer v2026-02-05) -----
