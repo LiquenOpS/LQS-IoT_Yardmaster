@@ -149,14 +149,23 @@ def _heartbeat_loop():
         time.sleep(interval)
 
 
-def send_northbound_response(resp_data):
+def send_northbound_response(resp_data, command_name=None):
+    """Push result to IOTA. If command_name given, add <cmd>_status and <cmd>_info so Orion entity gets updated (fixes PENDING)."""
+    payload = dict(resp_data) if isinstance(resp_data, dict) else {"_raw": str(resp_data)[:500]}
+    if command_name:
+        ok = payload.get("status") in ("success", "ok") and "error" not in str(payload.get("detail", "")).lower()
+        payload[f"{command_name}_status"] = "OK" if ok else "ERROR"
+        info_parts = [str(payload.get("detail", ""))] if payload.get("detail") else []
+        if payload.get("asset_id"):
+            info_parts.append(f"asset_id={payload['asset_id']}")
+        payload[f"{command_name}_info"] = " | ".join(info_parts) if info_parts else json.dumps(payload)[:200]
     params = {"k": API_KEY, "i": ENTITY_ID}
     try:
-        r = requests.post(NORTHBOUND_URL, params=params, headers=_IOTA_HEADERS, data=json.dumps(resp_data), timeout=10)
+        r = requests.post(NORTHBOUND_URL, params=params, headers=_IOTA_HEADERS, data=json.dumps(payload), timeout=10)
         r.raise_for_status()
         return r.json()
     except requests.RequestException as e:
-        print(f"Northbound error: {e}")
+        log.warning("Northbound error: %s", e)
         return {"error": str(e)}
 
 
@@ -290,6 +299,15 @@ def health():
     return jsonify({"status": "ok"}), 200
 
 
+def _command_name_from_data(data):
+    """Return the command key that triggered this request, for northbound _status/_info."""
+    for k in ("createAsset", "updateAssetPatch", "deleteAsset", "updatePlaylistOrder", "listAssets", "setAdopted",
+              "ledConfig", "effectSet", "playlistResume", "playlistAdd", "playlistRemove"):
+        if data.get(k) is not None:
+            return k
+    return None
+
+
 @app.route("/command", methods=["POST"])
 def dispatch_command():
     data = request.get_json() or {}
@@ -347,7 +365,8 @@ def dispatch_command():
     if result is None:
         return jsonify({"error": "Unknown command"}), 400
 
-    send_northbound_response(result)
+    cmd_name = _command_name_from_data(data)
+    send_northbound_response(result, command_name=cmd_name)
     log.info("Command dispatched, result keys: %s", list(result.keys()) if isinstance(result, dict) else str(result)[:80])
     return jsonify(result)
 
