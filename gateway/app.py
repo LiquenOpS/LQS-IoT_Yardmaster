@@ -336,9 +336,10 @@ def health():
 
 
 def _command_name_from_data(data):
-    """Return the command key that triggered this request, for northbound _status/_info."""
-    for k in ("createAsset", "updateAssetPatch", "deleteAsset", "updatePlaylistOrder", "listAssets", "setAdopted",
-              "ledConfig", "effectSet", "playlistResume", "playlistAdd", "playlistRemove"):
+    """Return the command key from data (e.g. createAsset, deleteAsset)."""
+    for k in ("createAsset", "deleteAsset", "updateAssetPatch", "updatePlaylistOrder",
+              "listAssets", "setAdopted", "ledConfig", "effectSet", "playlistResume",
+              "playlistAdd", "playlistRemove"):
         if data.get(k) is not None:
             return k
     return None
@@ -402,9 +403,22 @@ def dispatch_command():
         return jsonify({"error": "Unknown command"}), 400
 
     cmd_name = _command_name_from_data(data)
-    send_northbound_response(result, command_name=cmd_name)
+    resp = dict(result) if isinstance(result, dict) else {}
+    if cmd_name:
+        ok = (
+            resp.get("status") in ("success", "ok")
+            or (cmd_name == "createAsset" and resp.get("asset_id"))
+        ) and "error" not in str(resp.get("detail", ""))
+        resp[f"{cmd_name}_status"] = "OK" if ok else "ERROR"
+        parts = [str(resp.get("detail", ""))] if resp.get("detail") else []
+        if resp.get("asset_id"):
+            parts.append(f"asset_id={resp['asset_id']}")
+        resp[f"{cmd_name}_info"] = " | ".join(parts) if parts else str(resp)[:200]
+        # FIWARE IOTA expects command name as key, result string as value (for Orion update)
+        if cmd_name == "createAsset" and resp.get("asset_id"):
+            resp[cmd_name] = f"asset_id={resp['asset_id']}"
     log.info("Command dispatched, result keys: %s", list(result.keys()) if isinstance(result, dict) else str(result)[:80])
-    return jsonify(result)
+    return jsonify(resp)
 
 
 # Start heartbeat thread (daemon so it exits with the process)
