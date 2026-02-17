@@ -198,7 +198,7 @@ def _anthias_resp(r, fallback=None):
 
 def list_assets(data):
     try:
-        r = requests.get(f"{ANTHIAS_BASE_URL}/", headers={"Content-Type": "application/json"}, timeout=10)
+        r = requests.get(ANTHIAS_BASE_URL, headers={"Content-Type": "application/json"}, timeout=10)
         return _anthias_resp(r)
     except requests.RequestException as e:
         return {"status": "error", "detail": str(e)}
