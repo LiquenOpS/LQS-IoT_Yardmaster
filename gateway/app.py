@@ -411,8 +411,9 @@ def dispatch_command():
             or (cmd_name == "createAsset" and resp.get("asset_id"))
         ) and "error" not in str(resp.get("detail", ""))
         parts = [str(resp.get("detail", ""))] if resp.get("detail") else []
+        # Orion forbids '=' in attr values; use ':' (see forbidden_characters)
         if resp.get("asset_id"):
-            parts.append(f"asset_id={resp['asset_id']}")
+            parts.append(f"asset_id:{resp['asset_id']}")
         result_str = " | ".join(parts) if parts else json.dumps(resp)[:200]
     # Doc: device returns 200 + {commandName: resultString}; IOTA parses this and updates Orion.
     # Do NOT POST to /iot/json — that's for measurements, not command response.

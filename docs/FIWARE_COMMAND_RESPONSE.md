@@ -21,7 +21,9 @@ const commandList = Object.keys(messageObj);  // 必須是 Object，不能是 st
 
 **正確格式**：`{ "commandName": "resultString" }`
 
-例如 createAsset：`{"createAsset": "asset_id=xxx"}`
+例如 createAsset：`{"createAsset": "asset_id:xxx"}`
+
+**注意**：Orion 禁止 `=` 等字元，結果字串用 `:` 取代 `=`（如 `asset_id:xxx`）。
 
 **重點**：
 1. 必須是 JSON Object（IOTA 會 `Object.keys()`）
