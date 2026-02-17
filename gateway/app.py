@@ -162,6 +162,25 @@ def _heartbeat_loop():
         time.sleep(interval)
 
 
+def _send_command_result_northbound(cmd_name, status, info):
+    """POST command result to /iot/json (fallback when HTTP response path fails)."""
+    payload = {f"{cmd_name}_status": status, f"{cmd_name}_info": info}
+    try:
+        r = requests.post(
+            NORTHBOUND_URL,
+            params={"k": API_KEY, "i": ENTITY_ID},
+            json=payload,
+            headers=_IOTA_HEADERS,
+            timeout=10,
+        )
+        if not r.ok:
+            log.warning("Northbound /iot/json: %s %s | %s", r.status_code, r.text[:200], payload)
+        else:
+            log.info("Northbound /iot/json: %s", payload)
+    except Exception as e:
+        log.warning("Northbound /iot/json error: %s", e)
+
+
 def send_northbound_response(resp_data, command_name=None):
     """Push result to IOTA. Use only provisioned attr lastCommandResult to avoid 400."""
     payload = dict(resp_data) if isinstance(resp_data, dict) else {"_raw": str(resp_data)[:500]}
@@ -415,9 +434,12 @@ def dispatch_command():
             parts.append(f"asset_id={resp['asset_id']}")
         result_str = " | ".join(parts) if parts else json.dumps(resp)[:200]
     log.info("Command dispatched, result keys: %s", list(result.keys()) if isinstance(result, dict) else str(result)[:80])
-    # IOTA updateCommand iterates Object.keys(body) and calls setCommandResult for EACH key.
-    # It expects ONLY {commandName: resultString}. Extra keys (asset_id, name, etc.) cause failures.
+    # 1) HTTP response for IOTA (may not work if body not parsed)
     iota_body = {cmd_name: result_str} if cmd_name and result_str else {}
+    # 2) Fallback: POST to /iot/json (createAsset_status/info provisioned)
+    if cmd_name == "createAsset" and result_str:
+        status = "OK" if resp.get("asset_id") else "ERROR"
+        _send_command_result_northbound(cmd_name, status, result_str)
     return jsonify(iota_body)
 
 
