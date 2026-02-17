@@ -1,5 +1,8 @@
 # FIWARE IoT Agent JSON — Command Response 規格
 
+> Command result 一律 b64 編碼，詳見 [COMMAND_RESPONSE_SPEC.md](./COMMAND_RESPONSE_SPEC.md)。  
+> 本文件描述 FIWARE 基本格式與 IOTA 要求。
+
 ## 官方說法
 
 根據 [FIWARE Tutorial](https://github.com/FIWARE/tutorials.IoT-Agent-JSON)：
@@ -19,12 +22,9 @@
 const commandList = Object.keys(messageObj);  // 必須是 Object，不能是 string！
 ```
 
-**正確格式**：`{ "commandName": "resultString" }`
+**正確格式**：`{ "commandName": "resultString" }`，resultString 依 [COMMAND_RESPONSE_SPEC.md](./COMMAND_RESPONSE_SPEC.md) 一律為 `b64:<base64url(JSON)>`。
 
-例如 createAsset 成功：`{"createAsset": "asset_id:xxx"}`  
-錯誤時：`{"createAsset": "status:error | detail:錯誤訊息"}`（讓 Odoo 能顯示錯誤）
-
-**注意**：Orion 禁止 `=` 等字元，結果字串用 `:` 取代 `=`（如 `asset_id:xxx`、`status:error`）。
+**注意**：Orion 禁止 `) ( ; = ' " > <`，故不可回傳純 JSON 字串。
 
 **重點**：
 1. 必須是 JSON Object（IOTA 會 `Object.keys()`）
@@ -48,4 +48,4 @@ const commandList = Object.keys(messageObj);  // 必須是 Object，不能是 st
 
 1. **查 IOTA log**（`IOTA_LOG_LEVEL=DEBUG`）：確認 `updateCommand` 是否被呼叫，以及是否有 `COMMANDS-002` 錯誤
 2. **protocol**：先改成 `"transport": "HTTP"`、移除或調整 `protocol` 再測
-3. **回應格式**：只回傳 `{"createAsset": "asset_id=xxx"}`，不要其他欄位
+3. **回應格式**：依 COMMAND_RESPONSE_SPEC 一律 `{"createAsset": "b64:..."}`，不要其他欄位

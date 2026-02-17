@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+import base64
 import requests
 import json
 import os
@@ -9,6 +10,13 @@ import time
 from dotenv import load_dotenv
 
 log = logging.getLogger(__name__)
+
+
+def _encode_b64_payload(obj):
+    """Per COMMAND_RESPONSE_SPEC: base64url encode JSON for Orion-forbidden chars."""
+    raw = json.dumps(obj, ensure_ascii=False)
+    b64 = base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii").rstrip("=")
+    return f"b64:{b64}"
 _root = os.path.join(os.path.dirname(__file__), "..")
 _DEBUG_LOG = os.path.join(_root, "..", ".cursor", "debug.log")
 
@@ -406,22 +414,9 @@ def dispatch_command():
     resp = dict(result) if isinstance(result, dict) else {}
     result_str = ""
     if cmd_name:
-        ok = (
-            resp.get("status") in ("success", "ok")
-            or (cmd_name == "createAsset" and resp.get("asset_id"))
-        ) and "error" not in str(resp.get("detail", ""))
-        # listAssets returns list; pass through as JSON for Odoo sync
-        if isinstance(result, list):
-            result_str = json.dumps(result)
-        else:
-            parts = []
-            if resp.get("status") == "error":
-                parts.append("status:error")  # Orion forbids '='; use ':'
-            if resp.get("detail"):
-                parts.append(str(resp.get("detail")))
-            if resp.get("asset_id"):
-                parts.append(f"asset_id:{resp['asset_id']}")
-            result_str = " | ".join(parts) if parts else json.dumps(resp)[:400]
+        # COMMAND_RESPONSE_SPEC: all responses use JSON+b64
+        payload = result if isinstance(result, list) else resp
+        result_str = _encode_b64_payload(payload)
     # Doc: device returns 200 + {commandName: resultString}; IOTA parses this and updates Orion.
     # Do NOT POST to /iot/json — that's for measurements, not command response.
     iota_body = {cmd_name: result_str} if cmd_name and result_str else {}
