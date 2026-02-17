@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+import base64
 import requests
 import json
 import os
@@ -9,7 +10,27 @@ import time
 from dotenv import load_dotenv
 
 log = logging.getLogger(__name__)
+
+
+def _encode_b64_payload(obj):
+    """Per COMMAND_RESPONSE_SPEC: base64url encode JSON for Orion-forbidden chars."""
+    raw = json.dumps(obj, ensure_ascii=False)
+    b64 = base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii").rstrip("=")
+    return f"b64:{b64}"
 _root = os.path.join(os.path.dirname(__file__), "..")
+_DEBUG_LOG = os.path.join(_root, "..", ".cursor", "debug.log")
+
+
+def _debug_log(hypothesis_id, message, data):
+    """Append NDJSON to debug log; also log to journal."""
+    payload = {"hypothesisId": hypothesis_id, "message": message, "data": data, "timestamp": time.time()}
+    log.info("[DEBUG %s] %s: %s", hypothesis_id, message, json.dumps(data)[:500])
+    try:
+        os.makedirs(os.path.dirname(_DEBUG_LOG), exist_ok=True)
+        with open(_DEBUG_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload) + "\n")
+    except Exception:
+        pass
 _config_dir = os.path.join(_root, "config")
 if os.path.isfile(os.path.join(_config_dir, "config.env")):
     load_dotenv(os.path.join(_config_dir, "config.env"))
@@ -149,47 +170,123 @@ def _heartbeat_loop():
         time.sleep(interval)
 
 
-def send_northbound_response(resp_data):
+def send_northbound_response(resp_data, command_name=None):
+    """Push result to IOTA. Use only provisioned attr lastCommandResult to avoid 400."""
+    payload = dict(resp_data) if isinstance(resp_data, dict) else {"_raw": str(resp_data)[:500]}
+    parts = []
+    for k in ("status", "detail", "asset_id", "message"):
+        if k in payload and payload[k] not in (None, ""):
+            parts.append(f"{k}={payload[k]}")
+    if not parts:
+        parts.append(json.dumps(payload)[:400])
+    safe = {"lastCommandResult": " | ".join(str(p) for p in parts)}
     params = {"k": API_KEY, "i": ENTITY_ID}
+    body = json.dumps(safe)
     try:
-        r = requests.post(NORTHBOUND_URL, params=params, headers=_IOTA_HEADERS, data=json.dumps(resp_data), timeout=10)
+        r = requests.post(NORTHBOUND_URL, params=params, headers=_IOTA_HEADERS, data=body, timeout=10)
         r.raise_for_status()
         return r.json()
     except requests.RequestException as e:
-        print(f"Northbound error: {e}")
+        log.warning("Northbound error: %s | body: %s", e, body[:300])
         return {"error": str(e)}
 
 
 # ----- Signage (anthias) -----
+def _anthias_resp(r, fallback=None):
+    """Parse Anthias response; on HTTP error return dict with status/detail for Odoo feedback."""
+    try:
+        body = r.json() if r.content else {}
+    except Exception:
+        body = {}
+    if r.ok:
+        return body
+    detail = body.get("detail") or body.get("message") or body.get("error") or r.text[:200] or f"HTTP {r.status_code}"
+    return {"status": "error", "detail": str(detail), "http_status": r.status_code}
+
+
 def list_assets(data):
-    r = requests.get(f"{ANTHIAS_BASE_URL}/", headers={"Content-Type": "application/json"}, timeout=10)
-    return r.json()
+    try:
+        r = requests.get(ANTHIAS_BASE_URL, headers={"Content-Type": "application/json"}, timeout=10)
+        return _anthias_resp(r)
+    except requests.RequestException as e:
+        return {"status": "error", "detail": str(e)}
+
 
 def create_asset(data):
-    asset = data.get("createAsset", {})
-    asset["skip_asset_check"] = False
-    r = requests.post(f"{ANTHIAS_BASE_URL}", json=asset, headers={"Content-Type": "application/json"}, timeout=10)
-    return r.json()
+    try:
+        raw = data.get("createAsset", {})
+        asset = raw.get("value", raw) if isinstance(raw, dict) else {}
+        asset = dict(asset) if isinstance(asset, dict) else {}
+        asset["skip_asset_check"] = False
+        # #region agent log
+        _debug_log("H1,H2,H3", "create_asset request", {"url": ANTHIAS_BASE_URL, "payload": asset, "raw_data_keys": list(data.keys())})
+        # #endregion
+        r = requests.post(f"{ANTHIAS_BASE_URL}", json=asset, headers={"Content-Type": "application/json"}, timeout=10)
+        out = _anthias_resp(r)
+        # #region agent log
+        _debug_log("H1,H3", "create_asset response", {"status_code": r.status_code, "ok": r.ok, "out": out, "raw_text": r.text[:300]})
+        # #endregion
+        if r.ok and isinstance(out, dict) and "asset_id" not in out and "id" in out:
+            out["asset_id"] = out["id"]
+        return out
+    except requests.RequestException as e:
+        _debug_log("H3", "create_asset exception", {"error": str(e)})
+        return {"status": "error", "detail": str(e)}
+
 
 def update_asset_patch(data):
-    asset = data.get("updateAssetPatch", {})
-    asset_id = asset.get("asset_id")
-    r = requests.patch(f"{ANTHIAS_BASE_URL}/{asset_id}", json=asset, headers={"Content-Type": "application/json"}, timeout=10)
-    return r.json()
+    try:
+        raw = data.get("updateAssetPatch", {})
+        asset = raw.get("value", raw) if isinstance(raw, dict) else {}
+        asset = dict(asset) if isinstance(asset, dict) else {}
+        asset_id = asset.get("asset_id")
+        if not asset_id:
+            return {"status": "error", "detail": "asset_id is required (Odoo record may have no anthias_id; create may have failed)"}
+        # #region agent log
+        _debug_log("H1,H5", "update_asset_patch request", {"url": f"{ANTHIAS_BASE_URL}/{asset_id}", "asset_id": asset_id, "asset_keys": list(asset.keys()), "raw_data_keys": list(data.keys())})
+        # #endregion
+        r = requests.patch(f"{ANTHIAS_BASE_URL}/{asset_id}", json=asset, headers={"Content-Type": "application/json"}, timeout=10)
+        # #region agent log
+        _debug_log("H1,H3", "update_asset_patch response", {"status_code": r.status_code, "ok": r.ok, "text": r.text[:400]})
+        # #endregion
+        if r.status_code == 204:
+            return {"status": "success", "asset_id": asset_id}
+        return _anthias_resp(r)
+    except requests.RequestException as e:
+        _debug_log("H3", "update_asset_patch exception", {"error": str(e)})
+        return {"status": "error", "detail": str(e)}
+
 
 def delete_asset(data):
-    payload = data.get("deleteAsset", {})
-    asset_id = payload.get("asset_id")
-    r = requests.delete(f"{ANTHIAS_BASE_URL}/{asset_id}", headers={"Content-Type": "application/json"}, timeout=10)
-    if r.status_code == 204:
-        return {"status": "success", "asset_id": asset_id, "message": "Deleted successfully."}
-    return r.json() if r.content else {}
+    try:
+        raw = data.get("deleteAsset", {})
+        payload = raw.get("value", raw) if isinstance(raw, dict) else {}
+        payload = dict(payload) if isinstance(payload, dict) else {}
+        asset_id = payload.get("asset_id")
+        r = requests.delete(f"{ANTHIAS_BASE_URL}/{asset_id}", headers={"Content-Type": "application/json"}, timeout=10)
+        if r.status_code == 204:
+            return {"status": "success", "asset_id": asset_id, "message": "Deleted successfully."}
+        return _anthias_resp(r)
+    except requests.RequestException as e:
+        return {"status": "error", "detail": str(e)}
+
 
 def update_playlist_order(data):
-    r = requests.post(f"{ANTHIAS_BASE_URL}/order", json=data.get("updatePlaylistOrder", {}), headers={"Content-Type": "application/json"}, timeout=10)
-    if r.status_code == 204:
-        return {"status": "success", "message": "Updated successfully."}
-    return r.json() if r.content else {}
+    try:
+        raw = data.get("updatePlaylistOrder", {})
+        payload = raw.get("value", raw) if isinstance(raw, dict) else raw or {}
+        # #region agent log
+        _debug_log("H4", "update_playlist_order request", {"url": f"{ANTHIAS_BASE_URL}/order", "payload": payload})
+        # #endregion
+        r = requests.post(f"{ANTHIAS_BASE_URL}/order", json=payload, headers={"Content-Type": "application/json"}, timeout=10)
+        # #region agent log
+        _debug_log("H4", "update_playlist_order response", {"status_code": r.status_code, "text": r.text[:300]})
+        # #endregion
+        if r.status_code == 204:
+            return {"status": "success", "message": "Updated successfully."}
+        return _anthias_resp(r)
+    except requests.RequestException as e:
+        return {"status": "error", "detail": str(e)}
 
 
 # ----- LEDStrip (Glimmer v2026-02-05) -----
@@ -244,6 +341,16 @@ def _handle_set_adopted(data):
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"}), 200
+
+
+def _command_name_from_data(data):
+    """Return the command key from data (e.g. createAsset, deleteAsset)."""
+    for k in ("createAsset", "deleteAsset", "updateAssetPatch", "updatePlaylistOrder",
+              "listAssets", "setAdopted", "ledConfig", "effectSet", "playlistResume",
+              "playlistAdd", "playlistRemove"):
+        if data.get(k) is not None:
+            return k
+    return None
 
 
 @app.route("/command", methods=["POST"])
@@ -303,9 +410,18 @@ def dispatch_command():
     if result is None:
         return jsonify({"error": "Unknown command"}), 400
 
-    send_northbound_response(result)
-    log.info("Command dispatched, result keys: %s", list(result.keys()) if isinstance(result, dict) else str(result)[:80])
-    return jsonify(result)
+    cmd_name = _command_name_from_data(data)
+    resp = dict(result) if isinstance(result, dict) else {}
+    result_str = ""
+    if cmd_name:
+        # COMMAND_RESPONSE_SPEC: all responses use JSON+b64
+        payload = result if isinstance(result, list) else resp
+        result_str = _encode_b64_payload(payload)
+    # Doc: device returns 200 + {commandName: resultString}; IOTA parses this and updates Orion.
+    # Do NOT POST to /iot/json — that's for measurements, not command response.
+    iota_body = {cmd_name: result_str} if cmd_name and result_str else {}
+    log.info("Command result (HTTP response for IOTA): %s", iota_body)
+    return jsonify(iota_body)
 
 
 # Start heartbeat thread (daemon so it exits with the process)
