@@ -28,6 +28,11 @@ const commandList = Object.keys(messageObj);  // 必須是 Object，不能是 st
 2. 每個 key 要是 provisioned command 的名稱
 3. value 要是字串（不能是空字串或純空白）
 
+## 實作注意
+
+- **只用 HTTP response**：Device 回 200 + JSON 即足夠，IOTA 會 parse 並呼叫 `updateCommand`。
+- **不要**額外 POST 到 `/iot/json`：該端點是給 measure（屬性上報）用的，不是 command response。若送 `createAsset_status`/`createAsset_info` 會得到 400 且格式不符。
+
 ## 可能問題
 
 | 問題 | 說明 |
