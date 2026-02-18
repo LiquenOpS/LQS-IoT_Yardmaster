@@ -1,0 +1,26 @@
+# Yardmaster config — copy to config/config.yaml and edit.
+# Each backend gets its own port and adopt state.
+
+# Common (IOTA, FIWARE)
+edge_device_ip: "192.168.1.100"
+iota_host: "localhost"
+iota_north_port: 4041
+iota_south_port: 7896
+api_key: "YardmasterKey"
+fiware_service: "lqs_iot"
+fiware_servicepath: "/"
+log_level: "INFO"
+
+# Backends: each entry = one Yardmaster port, one device in IOTA
+# type: Glimmer (LEDStrip) or Anthias (Signage)
+# port: from 44011 upward
+# device_id: NeoPixel-{MAC6}{suffix} for Glimmer, Anthias-{MAC6}{suffix} for Anthias
+backends:
+  - type: Glimmer
+    port: 44011
+    device_id: "NeoPixel-000001A"
+    base_url: "http://localhost:1129"
+  - type: Anthias
+    port: 44012
+    device_id: "Anthias-000001B"
+    base_url: "http://localhost:8000/api/v2/assets"

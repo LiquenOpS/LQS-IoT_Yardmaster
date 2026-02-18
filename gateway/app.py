@@ -1,15 +1,23 @@
-from flask import Flask, request, jsonify
+"""
+Yardmaster multi-backend gateway.
+Each backend runs on its own port. Main entry spawns Waitress threads.
+"""
 import base64
-import requests
 import json
-import os
 import logging
+import os
 import threading
 import time
 
-from dotenv import load_dotenv
+import requests
+import yaml
+from flask import Flask, request, jsonify
+from waitress import serve
 
-log = logging.getLogger(__name__)
+_ROOT = os.path.join(os.path.dirname(__file__), "..")
+_CONFIG_DIR = os.path.join(_ROOT, "config")
+_HEARTBEAT_INTERVAL = 120
+_RETRY_INTERVAL = 30
 
 
 def _encode_b64_payload(obj):
@@ -17,414 +25,313 @@ def _encode_b64_payload(obj):
     raw = json.dumps(obj, ensure_ascii=False)
     b64 = base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii").rstrip("=")
     return f"b64:{b64}"
-_root = os.path.join(os.path.dirname(__file__), "..")
-_DEBUG_LOG = os.path.join(_root, "..", ".cursor", "debug.log")
 
 
-def _debug_log(hypothesis_id, message, data):
-    """Append NDJSON to debug log; also log to journal."""
-    payload = {"hypothesisId": hypothesis_id, "message": message, "data": data, "timestamp": time.time()}
-    log.info("[DEBUG %s] %s: %s", hypothesis_id, message, json.dumps(data)[:500])
-    try:
-        os.makedirs(os.path.dirname(_DEBUG_LOG), exist_ok=True)
-        with open(_DEBUG_LOG, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload) + "\n")
-    except Exception:
-        pass
-_config_dir = os.path.join(_root, "config")
-if os.path.isfile(os.path.join(_config_dir, "config.env")):
-    load_dotenv(os.path.join(_config_dir, "config.env"))
-    load_dotenv(os.path.join(_config_dir, "device.env"))
-else:
-    load_dotenv(os.path.join(_root, "config.env"))
-    load_dotenv(os.path.join(_root, "device.env"))
-
-app = Flask(__name__)
-
-IOTA_HOST = os.environ.get("IOTA_HOST", "localhost")
-LOG_LEVEL = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
-IOTA_SOUTH_PORT = os.environ.get("IOTA_SOUTH_PORT", "7896")
-API_KEY = os.environ.get("API_KEY", "YardmasterKey")
-ENTITY_ID = os.environ.get("DEVICE_ID")
-ANTHIAS_BASE_URL = os.environ.get("ANTHIAS_BASE_URL", "http://localhost:8000/api/v2/assets")
-GLIMMER_BASE_URL = os.environ.get("GLIMMER_BASE_URL", "http://localhost:1129").rstrip("/")
-ENABLE_SIGNAGE = os.environ.get("ENABLE_SIGNAGE", "true").lower() == "true"
-ENABLE_LED_STRIP = os.environ.get("ENABLE_LED_STRIP", "true").lower() == "true"
-
-logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s %(levelname)s %(message)s")
-
-NORTHBOUND_URL = f"http://{IOTA_HOST}:{IOTA_SOUTH_PORT}/iot/json"
-HEARTBEAT_INTERVAL = 120  # seconds (when adopted)
-RETRY_INTERVAL = 30  # seconds (when not adopted)
-ADOPT_STATE_FILE = os.path.join(_config_dir, "adopt_state.json")
-FIWARE_SERVICE = os.environ.get("FIWARE_SERVICE", "lqs_iot")
-FIWARE_SERVICEPATH = os.environ.get("FIWARE_SERVICEPATH", "/")
-
-_IOTA_HEADERS = {
-    "Content-Type": "application/json",
-    "Fiware-Service": FIWARE_SERVICE,
-    "Fiware-Servicepath": FIWARE_SERVICEPATH,
-}
+def load_config():
+    """Load config from config/config.yaml. Raises if missing."""
+    path = os.path.join(_CONFIG_DIR, "config.yaml")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Config not found: {path}. Run setup.sh first.")
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
 
 
-def _load_adopted():
-    """Load adopted state from file. Default False."""
-    try:
-        if os.path.isfile(ADOPT_STATE_FILE):
-            with open(ADOPT_STATE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return bool(data.get("adopted", False))
-    except Exception as e:
-        log.warning("Could not load adopt state: %s", e)
-    return False
+def create_backend_app(backend_cfg, common_cfg, backend_index):
+    """Create Flask app for one backend. Each has own adopt state, heartbeat, handlers."""
+    app = Flask(__name__)
+    log = logging.getLogger(f"yardmaster.backend{backend_index}")
 
+    # Backend config
+    backend_type = backend_cfg.get("type", "").strip()
+    is_signage = backend_type.lower() == "anthias"
+    is_ledstrip = backend_type.lower() == "glimmer"
+    entity_id = backend_cfg.get("device_id", "")
+    base_url = (backend_cfg.get("base_url", "") or "").rstrip("/")
+    port = backend_cfg.get("port", 44011)
 
-def _save_adopted(adopted):
-    """Persist adopted state to file."""
-    try:
-        os.makedirs(os.path.dirname(ADOPT_STATE_FILE), exist_ok=True)
-        with open(ADOPT_STATE_FILE, "w", encoding="utf-8") as f:
-            json.dump({"adopted": adopted}, f, indent=2)
-    except Exception as e:
-        log.error("Could not save adopt state: %s", e)
+    # Common config
+    iota_host = common_cfg.get("iota_host", "localhost")
+    iota_south = common_cfg.get("iota_south_port", "7896")
+    api_key = common_cfg.get("api_key", "YardmasterKey")
+    fiware_svc = common_cfg.get("fiware_service", "lqs_iot")
+    fiware_path = common_cfg.get("fiware_servicepath", "/")
 
-
-def _build_supported_type():
-    parts = []
-    if ENABLE_SIGNAGE:
-        parts.append("Signage")
-    if ENABLE_LED_STRIP:
-        parts.append("LEDStrip")
-    return ",".join(parts) or ""
-
-
-def _fetch_glimmer_supported_effects():
-    """Fetch supported_effects from Glimmer GET /api/config. Returns comma-separated string or None."""
-    try:
-        r = requests.get(
-            f"{GLIMMER_BASE_URL}/api/config",
-            headers={"Content-Type": "application/json"},
-            timeout=5,
-        )
-        r.raise_for_status()
-        data = r.json()
-        effects = data.get("hardware", {}).get("supported_effects")
-        if isinstance(effects, list) and effects:
-            return ",".join(str(e) for e in effects)
-    except Exception as e:
-        log.warning("Could not fetch Glimmer supported_effects: %s", e)
-    return None
-
-
-def _send_type_specific_attrs_and_notify():
-    """Fetch type-specific attrs (e.g. supportedEffects) and send to IOTA."""
-    payload = {"deviceStatus": "online", "adopted": True}
-    if ENABLE_LED_STRIP:
-        effects = _fetch_glimmer_supported_effects()
-        if effects:
-            payload["supportedEffects"] = effects
-    try:
-        r = requests.post(
-            NORTHBOUND_URL,
-            params={"k": API_KEY, "i": ENTITY_ID},
-            json=payload,
-            headers=_IOTA_HEADERS,
-            timeout=10,
-        )
-        r.raise_for_status()
-        log.info("Type-specific attrs sent (supportedEffects=%s)", "..." if payload.get("supportedEffects") else "n/a")
-    except Exception as e:
-        log.warning("Could not send type-specific attrs: %s", e)
-
-
-# Adopted state: persisted, loaded on startup
-_adopted = _load_adopted()
-
-
-def _heartbeat_loop():
-    """Send measures to IOTA. Not adopted: supportedType + adopted:false every 30s. Adopted: adopted:true every 2 min."""
-    global _adopted
-    time.sleep(10)  # let server bind first
-    while True:
-        try:
-            if _adopted:
-                payload = {"deviceStatus": "online", "adopted": True}
-                interval = HEARTBEAT_INTERVAL
-                log.debug("Heartbeat sent: deviceStatus=online, adopted=true")
-            else:
-                payload = {"deviceStatus": "online", "adopted": False}
-                supported_type = _build_supported_type()
-                if supported_type:
-                    payload["supportedType"] = supported_type
-                interval = RETRY_INTERVAL
-                log.debug("Heartbeat sent: deviceStatus, supportedType, adopted=false")
-            requests.post(
-                NORTHBOUND_URL,
-                params={"k": API_KEY, "i": ENTITY_ID},
-                json=payload,
-                headers=_IOTA_HEADERS,
-                timeout=10,
-            )
-        except Exception as e:
-            log.error("Heartbeat error: %s", e)
-        time.sleep(interval)
-
-
-def send_northbound_response(resp_data, command_name=None):
-    """Push result to IOTA. Use only provisioned attr lastCommandResult to avoid 400."""
-    payload = dict(resp_data) if isinstance(resp_data, dict) else {"_raw": str(resp_data)[:500]}
-    parts = []
-    for k in ("status", "detail", "asset_id", "message"):
-        if k in payload and payload[k] not in (None, ""):
-            parts.append(f"{k}={payload[k]}")
-    if not parts:
-        parts.append(json.dumps(payload)[:400])
-    safe = {"lastCommandResult": " | ".join(str(p) for p in parts)}
-    params = {"k": API_KEY, "i": ENTITY_ID}
-    body = json.dumps(safe)
-    try:
-        r = requests.post(NORTHBOUND_URL, params=params, headers=_IOTA_HEADERS, data=body, timeout=10)
-        r.raise_for_status()
-        return r.json()
-    except requests.RequestException as e:
-        log.warning("Northbound error: %s | body: %s", e, body[:300])
-        return {"error": str(e)}
-
-
-# ----- Signage (anthias) -----
-def _anthias_resp(r, fallback=None):
-    """Parse Anthias response; on HTTP error return dict with status/detail for Odoo feedback."""
-    try:
-        body = r.json() if r.content else {}
-    except Exception:
-        body = {}
-    if r.ok:
-        return body
-    detail = body.get("detail") or body.get("message") or body.get("error") or r.text[:200] or f"HTTP {r.status_code}"
-    return {"status": "error", "detail": str(detail), "http_status": r.status_code}
-
-
-def list_assets(data):
-    try:
-        r = requests.get(ANTHIAS_BASE_URL, headers={"Content-Type": "application/json"}, timeout=10)
-        return _anthias_resp(r)
-    except requests.RequestException as e:
-        return {"status": "error", "detail": str(e)}
-
-
-def create_asset(data):
-    try:
-        raw = data.get("createAsset", {})
-        asset = raw.get("value", raw) if isinstance(raw, dict) else {}
-        asset = dict(asset) if isinstance(asset, dict) else {}
-        asset["skip_asset_check"] = False
-        # #region agent log
-        _debug_log("H1,H2,H3", "create_asset request", {"url": ANTHIAS_BASE_URL, "payload": asset, "raw_data_keys": list(data.keys())})
-        # #endregion
-        r = requests.post(f"{ANTHIAS_BASE_URL}", json=asset, headers={"Content-Type": "application/json"}, timeout=10)
-        out = _anthias_resp(r)
-        # #region agent log
-        _debug_log("H1,H3", "create_asset response", {"status_code": r.status_code, "ok": r.ok, "out": out, "raw_text": r.text[:300]})
-        # #endregion
-        if r.ok and isinstance(out, dict) and "asset_id" not in out and "id" in out:
-            out["asset_id"] = out["id"]
-        return out
-    except requests.RequestException as e:
-        _debug_log("H3", "create_asset exception", {"error": str(e)})
-        return {"status": "error", "detail": str(e)}
-
-
-def update_asset_patch(data):
-    try:
-        raw = data.get("updateAssetPatch", {})
-        asset = raw.get("value", raw) if isinstance(raw, dict) else {}
-        asset = dict(asset) if isinstance(asset, dict) else {}
-        asset_id = asset.get("asset_id")
-        if not asset_id:
-            return {"status": "error", "detail": "asset_id is required (Odoo record may have no anthias_id; create may have failed)"}
-        # #region agent log
-        _debug_log("H1,H5", "update_asset_patch request", {"url": f"{ANTHIAS_BASE_URL}/{asset_id}", "asset_id": asset_id, "asset_keys": list(asset.keys()), "raw_data_keys": list(data.keys())})
-        # #endregion
-        r = requests.patch(f"{ANTHIAS_BASE_URL}/{asset_id}", json=asset, headers={"Content-Type": "application/json"}, timeout=10)
-        # #region agent log
-        _debug_log("H1,H3", "update_asset_patch response", {"status_code": r.status_code, "ok": r.ok, "text": r.text[:400]})
-        # #endregion
-        if r.status_code == 204:
-            return {"status": "success", "asset_id": asset_id}
-        return _anthias_resp(r)
-    except requests.RequestException as e:
-        _debug_log("H3", "update_asset_patch exception", {"error": str(e)})
-        return {"status": "error", "detail": str(e)}
-
-
-def delete_asset(data):
-    try:
-        raw = data.get("deleteAsset", {})
-        payload = raw.get("value", raw) if isinstance(raw, dict) else {}
-        payload = dict(payload) if isinstance(payload, dict) else {}
-        asset_id = payload.get("asset_id")
-        r = requests.delete(f"{ANTHIAS_BASE_URL}/{asset_id}", headers={"Content-Type": "application/json"}, timeout=10)
-        if r.status_code == 204:
-            return {"status": "success", "asset_id": asset_id, "message": "Deleted successfully."}
-        return _anthias_resp(r)
-    except requests.RequestException as e:
-        return {"status": "error", "detail": str(e)}
-
-
-def update_playlist_order(data):
-    try:
-        raw = data.get("updatePlaylistOrder", {})
-        payload = raw.get("value", raw) if isinstance(raw, dict) else raw or {}
-        # #region agent log
-        _debug_log("H4", "update_playlist_order request", {"url": f"{ANTHIAS_BASE_URL}/order", "payload": payload})
-        # #endregion
-        r = requests.post(f"{ANTHIAS_BASE_URL}/order", json=payload, headers={"Content-Type": "application/json"}, timeout=10)
-        # #region agent log
-        _debug_log("H4", "update_playlist_order response", {"status_code": r.status_code, "text": r.text[:300]})
-        # #endregion
-        if r.status_code == 204:
-            return {"status": "success", "message": "Updated successfully."}
-        return _anthias_resp(r)
-    except requests.RequestException as e:
-        return {"status": "error", "detail": str(e)}
-
-
-# ----- LEDStrip (Glimmer v2026-02-05) -----
-def glimmer_post(path, body=None):
-    url = f"{GLIMMER_BASE_URL}{path}"
-    r = requests.post(url, json=body or {}, headers={"Content-Type": "application/json"}, timeout=10)
-    try:
-        return r.json() if r.content else {}
-    except Exception:
-        return {"status_code": r.status_code, "text": r.text}
-
-
-def _send_unadopted_state_and_notify():
-    """Send adopted=false + supportedType to IOTA immediately (so Odoo syncs without waiting for heartbeat)."""
-    payload = {
-        "deviceStatus": "online",
-        "adopted": False,
-        "supportedType": _build_supported_type(),
+    northbound_url = f"http://{iota_host}:{iota_south}/iot/json"
+    adopt_file = os.path.join(_CONFIG_DIR, f"adopt_backend_{backend_index}.json")
+    iota_headers = {
+        "Content-Type": "application/json",
+        "Fiware-Service": fiware_svc,
+        "Fiware-Servicepath": fiware_path,
     }
-    try:
-        r = requests.post(
-            NORTHBOUND_URL,
-            params={"k": API_KEY, "i": ENTITY_ID},
-            json=payload,
-            headers=_IOTA_HEADERS,
-            timeout=10,
-        )
-        r.raise_for_status()
-        log.info("Unadopted state sent to IOTA (adopted=false, supportedType)")
-    except Exception as e:
-        log.warning("Could not send unadopted state: %s", e)
 
+    def load_adopted():
+        try:
+            if os.path.isfile(adopt_file):
+                with open(adopt_file, "r", encoding="utf-8") as f:
+                    return bool(json.load(f).get("adopted", False))
+        except Exception as e:
+            log.warning("Could not load adopt state: %s", e)
+        return False
 
-def _handle_set_adopted(data):
-    """Handle setAdopted command. Value: true or false."""
-    global _adopted
-    cmd = data.get("setAdopted")
-    if cmd is None:
+    def save_adopted(adopted):
+        try:
+            os.makedirs(os.path.dirname(adopt_file), exist_ok=True)
+            with open(adopt_file, "w", encoding="utf-8") as f:
+                json.dump({"adopted": adopted}, f, indent=2)
+        except Exception as e:
+            log.error("Could not save adopt state: %s", e)
+
+    adopted_ref = {"value": load_adopted()}
+
+    def fetch_glimmer_effects():
+        if not is_ledstrip or not base_url:
+            return None
+        try:
+            r = requests.get(
+                f"{base_url}/api/config",
+                headers={"Content-Type": "application/json"},
+                timeout=5,
+            )
+            r.raise_for_status()
+            data = r.json()
+            effects = data.get("hardware", {}).get("supported_effects")
+            if isinstance(effects, list) and effects:
+                return ",".join(str(e) for e in effects)
+        except Exception as e:
+            log.warning("Could not fetch Glimmer supported_effects: %s", e)
         return None
-    val = cmd.get("value") if isinstance(cmd, dict) else cmd
-    adopted = str(val).lower() in ("true", "1", "yes")
-    _adopted = adopted
-    _save_adopted(adopted)
-    log.info("setAdopted: %s (persisted)", adopted)
-    if adopted:
-        _send_type_specific_attrs_and_notify()
-    else:
-        _send_unadopted_state_and_notify()
-    return {"status": "ok", "adopted": adopted}
 
+    def heartbeat_loop():
+        time.sleep(10)
+        while True:
+            try:
+                if adopted_ref["value"]:
+                    payload = {"deviceStatus": "online", "adopted": True}
+                    if is_ledstrip:
+                        effects = fetch_glimmer_effects()
+                        if effects:
+                            payload["supportedEffects"] = effects
+                    interval = _HEARTBEAT_INTERVAL
+                else:
+                    payload = {"deviceStatus": "online", "adopted": False}
+                    interval = _RETRY_INTERVAL
+                requests.post(
+                    northbound_url,
+                    params={"k": api_key, "i": entity_id},
+                    json=payload,
+                    headers=iota_headers,
+                    timeout=10,
+                )
+            except Exception as e:
+                log.error("Heartbeat error: %s", e)
+            time.sleep(interval)
 
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({"status": "ok"}), 200
+    def anthias_resp(r):
+        try:
+            body = r.json() if r.content else {}
+        except Exception:
+            body = {}
+        if r.ok:
+            return body
+        detail = body.get("detail") or body.get("message") or body.get("error") or r.text[:200] or f"HTTP {r.status_code}"
+        return {"status": "error", "detail": str(detail), "http_status": r.status_code}
 
+    def glimmer_post(path, body=None):
+        url = f"{base_url}{path}"
+        r = requests.post(url, json=body or {}, headers={"Content-Type": "application/json"}, timeout=10)
+        try:
+            return r.json() if r.content else {}
+        except Exception:
+            return {"status_code": r.status_code, "text": r.text}
 
-def _command_name_from_data(data):
-    """Return the command key from data (e.g. createAsset, deleteAsset)."""
-    for k in ("createAsset", "deleteAsset", "updateAssetPatch", "updatePlaylistOrder",
-              "listAssets", "setAdopted", "ledConfig", "effectSet", "playlistResume",
-              "playlistAdd", "playlistRemove"):
-        if data.get(k) is not None:
-            return k
-    return None
+    @app.route("/health", methods=["GET"])
+    def health():
+        return jsonify({"status": "ok", "backend": backend_index}), 200
 
+    def command_name_from_data(data):
+        for k in ("createAsset", "deleteAsset", "updateAssetPatch", "updatePlaylistOrder",
+                  "listAssets", "setAdopted", "ledConfig", "effectSet", "playlistResume",
+                  "playlistAdd", "playlistRemove"):
+            if data.get(k) is not None:
+                return k
+        return None
 
-@app.route("/command", methods=["POST"])
-def dispatch_command():
-    data = request.get_json() or {}
-    log.info("Command received: %s", list(data.keys()) if data else "empty")
-    result = None
+    @app.route("/command", methods=["POST"])
+    def dispatch_command():
+        data = request.get_json() or {}
+        log.info("Command received: %s", list(data.keys()) if data else "empty")
+        result = None
 
-    # setAdopted (must run before other handlers to update _adopted for heartbeat)
-    if data.get("setAdopted") is not None:
-        result = _handle_set_adopted(data)
+        # setAdopted
+        if data.get("setAdopted") is not None:
+            cmd = data.get("setAdopted")
+            val = cmd.get("value") if isinstance(cmd, dict) else cmd
+            adopted = str(val).lower() in ("true", "1", "yes")
+            adopted_ref["value"] = adopted
+            save_adopted(adopted)
+            log.info("setAdopted: %s (persisted)", adopted)
+            if adopted and is_ledstrip:
+                effects = fetch_glimmer_effects()
+                payload = {"deviceStatus": "online", "adopted": True}
+                if effects:
+                    payload["supportedEffects"] = effects
+                try:
+                    requests.post(northbound_url, params={"k": api_key, "i": entity_id},
+                                 json=payload, headers=iota_headers, timeout=10)
+                except Exception as e:
+                    log.warning("Could not send type attrs: %s", e)
+            elif not adopted:
+                try:
+                    requests.post(northbound_url, params={"k": api_key, "i": entity_id},
+                                 json={"deviceStatus": "online", "adopted": False},
+                                 headers=iota_headers, timeout=10)
+                except Exception as e:
+                    log.warning("Could not send unadopted state: %s", e)
+            result = {"status": "ok", "adopted": adopted}
 
-    # Signage
-    elif data.get("listAssets") is not None:
-        if not ENABLE_SIGNAGE:
-            return jsonify({"error": "Signage not enabled"}), 501
-        result = list_assets(data)
-    elif data.get("createAsset") is not None:
-        if not ENABLE_SIGNAGE:
-            return jsonify({"error": "Signage not enabled"}), 501
-        result = create_asset(data)
-    elif data.get("updateAssetPatch") is not None:
-        if not ENABLE_SIGNAGE:
-            return jsonify({"error": "Signage not enabled"}), 501
-        result = update_asset_patch(data)
-    elif data.get("deleteAsset") is not None:
-        if not ENABLE_SIGNAGE:
-            return jsonify({"error": "Signage not enabled"}), 501
-        result = delete_asset(data)
-    elif data.get("updatePlaylistOrder") is not None:
-        if not ENABLE_SIGNAGE:
-            return jsonify({"error": "Signage not enabled"}), 501
-        result = update_playlist_order(data)
+        # Signage (Anthias)
+        elif data.get("listAssets") is not None:
+            if not is_signage:
+                return jsonify({"error": "Signage not enabled"}), 501
+            try:
+                r = requests.get(base_url, headers={"Content-Type": "application/json"}, timeout=10)
+                result = anthias_resp(r)
+            except requests.RequestException as e:
+                result = {"status": "error", "detail": str(e)}
+        elif data.get("createAsset") is not None:
+            if not is_signage:
+                return jsonify({"error": "Signage not enabled"}), 501
+            try:
+                raw = data.get("createAsset", {})
+                asset = raw.get("value", raw) if isinstance(raw, dict) else {}
+                asset = dict(asset) if isinstance(asset, dict) else {}
+                asset["skip_asset_check"] = False
+                r = requests.post(base_url, json=asset, headers={"Content-Type": "application/json"}, timeout=10)
+                out = anthias_resp(r)
+                if r.ok and isinstance(out, dict) and "asset_id" not in out and "id" in out:
+                    out["asset_id"] = out["id"]
+                result = out
+            except requests.RequestException as e:
+                result = {"status": "error", "detail": str(e)}
+        elif data.get("updateAssetPatch") is not None:
+            if not is_signage:
+                return jsonify({"error": "Signage not enabled"}), 501
+            try:
+                raw = data.get("updateAssetPatch", {})
+                asset = raw.get("value", raw) if isinstance(raw, dict) else {}
+                asset_id = asset.get("asset_id")
+                if not asset_id:
+                    result = {"status": "error", "detail": "asset_id is required"}
+                else:
+                    r = requests.patch(f"{base_url}/{asset_id}", json=asset,
+                                      headers={"Content-Type": "application/json"}, timeout=10)
+                    result = {"status": "success", "asset_id": asset_id} if r.status_code == 204 else anthias_resp(r)
+            except requests.RequestException as e:
+                result = {"status": "error", "detail": str(e)}
+        elif data.get("deleteAsset") is not None:
+            if not is_signage:
+                return jsonify({"error": "Signage not enabled"}), 501
+            try:
+                raw = data.get("deleteAsset", {})
+                payload = raw.get("value", raw) if isinstance(raw, dict) else {}
+                asset_id = payload.get("asset_id") if isinstance(payload, dict) else None
+                r = requests.delete(f"{base_url}/{asset_id}", headers={"Content-Type": "application/json"}, timeout=10)
+                result = {"status": "success", "asset_id": asset_id} if r.status_code == 204 else anthias_resp(r)
+            except requests.RequestException as e:
+                result = {"status": "error", "detail": str(e)}
+        elif data.get("updatePlaylistOrder") is not None:
+            if not is_signage:
+                return jsonify({"error": "Signage not enabled"}), 501
+            try:
+                raw = data.get("updatePlaylistOrder", {})
+                payload = raw.get("value", raw) if isinstance(raw, dict) else raw or {}
+                r = requests.post(f"{base_url}/order", json=payload,
+                                 headers={"Content-Type": "application/json"}, timeout=10)
+                result = {"status": "success"} if r.status_code == 204 else anthias_resp(r)
+            except requests.RequestException as e:
+                result = {"status": "error", "detail": str(e)}
 
-    # LEDStrip (Glimmer)
-    elif data.get("ledConfig") is not None:
-        if not ENABLE_LED_STRIP:
-            return jsonify({"error": "LEDStrip not enabled"}), 501
-        result = glimmer_post("/api/config", data.get("ledConfig"))
-    elif data.get("effectSet") is not None:
-        if not ENABLE_LED_STRIP:
-            return jsonify({"error": "LEDStrip not enabled"}), 501
-        result = glimmer_post("/api/effect/set", data.get("effectSet"))
-    elif data.get("playlistResume") is not None:
-        if not ENABLE_LED_STRIP:
-            return jsonify({"error": "LEDStrip not enabled"}), 501
-        result = glimmer_post("/api/playlist/resume")
-    elif data.get("playlistAdd") is not None:
-        if not ENABLE_LED_STRIP:
-            return jsonify({"error": "LEDStrip not enabled"}), 501
-        result = glimmer_post("/api/playlist/add", data.get("playlistAdd"))
-    elif data.get("playlistRemove") is not None:
-        if not ENABLE_LED_STRIP:
-            return jsonify({"error": "LEDStrip not enabled"}), 501
-        result = glimmer_post("/api/playlist/remove", data.get("playlistRemove"))
+        # LEDStrip (Glimmer)
+        elif data.get("ledConfig") is not None:
+            if not is_ledstrip:
+                return jsonify({"error": "LEDStrip not enabled"}), 501
+            result = glimmer_post("/api/config", data.get("ledConfig"))
+        elif data.get("effectSet") is not None:
+            if not is_ledstrip:
+                return jsonify({"error": "LEDStrip not enabled"}), 501
+            result = glimmer_post("/api/effect/set", data.get("effectSet"))
+        elif data.get("playlistResume") is not None:
+            if not is_ledstrip:
+                return jsonify({"error": "LEDStrip not enabled"}), 501
+            result = glimmer_post("/api/playlist/resume")
+        elif data.get("playlistAdd") is not None:
+            if not is_ledstrip:
+                return jsonify({"error": "LEDStrip not enabled"}), 501
+            result = glimmer_post("/api/playlist/add", data.get("playlistAdd"))
+        elif data.get("playlistRemove") is not None:
+            if not is_ledstrip:
+                return jsonify({"error": "LEDStrip not enabled"}), 501
+            result = glimmer_post("/api/playlist/remove", data.get("playlistRemove"))
 
-    if result is None:
-        return jsonify({"error": "Unknown command"}), 400
+        if result is None:
+            return jsonify({"error": "Unknown command"}), 400
 
-    cmd_name = _command_name_from_data(data)
-    resp = dict(result) if isinstance(result, dict) else {}
-    result_str = ""
-    if cmd_name:
-        # COMMAND_RESPONSE_SPEC: all responses use JSON+b64
+        cmd_name = command_name_from_data(data)
+        resp = dict(result) if isinstance(result, dict) else {}
         payload = result if isinstance(result, list) else resp
         result_str = _encode_b64_payload(payload)
-    # Doc: device returns 200 + {commandName: resultString}; IOTA parses this and updates Orion.
-    # Do NOT POST to /iot/json — that's for measurements, not command response.
-    iota_body = {cmd_name: result_str} if cmd_name and result_str else {}
-    log.info("Command result (HTTP response for IOTA): %s", iota_body)
-    return jsonify(iota_body)
+        iota_body = {cmd_name: result_str} if cmd_name and result_str else {}
+        log.info("Command result: %s", iota_body)
+        return jsonify(iota_body)
+
+    if entity_id:
+        t = threading.Thread(target=heartbeat_loop, daemon=True)
+        t.start()
+
+    return app
 
 
-# Start heartbeat thread (daemon so it exits with the process)
-if ENTITY_ID:
-    _hb = threading.Thread(target=_heartbeat_loop, daemon=True)
-    _hb.start()
+def main():
+    """Load config, spawn Waitress thread per backend."""
+    cfg = load_config()
+    common = {k: cfg.get(k) for k in ("iota_host", "iota_north_port", "iota_south_port",
+                                       "api_key", "fiware_service", "fiware_servicepath", "log_level")}
+    common.setdefault("iota_host", "localhost")
+    common.setdefault("iota_south_port", "7896")
+    common.setdefault("api_key", "YardmasterKey")
+    common.setdefault("fiware_service", "lqs_iot")
+    common.setdefault("fiware_servicepath", "/")
+
+    log_level = getattr(logging, (common.get("log_level") or "INFO").upper(), logging.INFO)
+    logging.basicConfig(level=log_level, format="%(asctime)s %(levelname)s %(message)s")
+    log = logging.getLogger("yardmaster")
+
+    backends = cfg.get("backends") or []
+    if not backends:
+        log.error("No backends defined in config.yaml")
+        raise SystemExit(1)
+
+    threads = []
+    for i, backend in enumerate(backends):
+        app = create_backend_app(backend, common, i)
+        port = backend.get("port", 44011 + i)
+        device_id = backend.get("device_id", f"backend{i}")
+        log.info("Starting backend %d: %s on port %d", i, device_id, port)
+
+        def run_server(a, p):
+            serve(a, host="0.0.0.0", port=p, threads=1)
+
+        t = threading.Thread(target=run_server, args=(app, port), daemon=True)
+        t.start()
+        threads.append(t)
+
+    log.info("All %d backends started. Press Ctrl+C to stop.", len(backends))
+    try:
+        for t in threads:
+            t.join()
+    except KeyboardInterrupt:
+        log.info("Shutting down.")
+
+
+if __name__ == "__main__":
+    main()
