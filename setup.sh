@@ -52,10 +52,9 @@ case "$CHOICE" in
   1)
     CONFIG_CREATED=false
     if [ ! -f "$CONFIG_DIR/config.yaml" ]; then
-      [ ! -d "$ROOT/config.example" ] && { echo "Error: config.example not found." >&2; exit 1; }
-      echo "Creating config/ from config.example..."
+      [ ! -f "$ROOT/config.example/config.yaml.template" ] && { echo "Error: config.example/config.yaml.template not found." >&2; exit 1; }
+      echo "Creating config/..."
       mkdir -p "$CONFIG_DIR"
-      cp "$ROOT/config.example/config.yaml.example" "$CONFIG_DIR/config.yaml"
       CONFIG_CREATED=true
     fi
 
@@ -88,8 +87,8 @@ case "$CHOICE" in
       echo "== Backends =="
       read -p "How many Glimmer (LEDStrip) backends? [0]: " N_GLIMMER
       N_GLIMMER="${N_GLIMMER:-0}"
-      read -p "How many Anthias (Signage) backends? [1]: " N_ANTHIAS
-      N_ANTHIAS="${N_ANTHIAS:-1}"
+      read -p "How many Anthias (Signage) backends? [0]: " N_ANTHIAS
+      N_ANTHIAS="${N_ANTHIAS:-0}"
       [ "$N_GLIMMER" -eq 0 ] && [ "$N_ANTHIAS" -eq 0 ] && N_ANTHIAS=1
 
       MAC6=$(get_mac6)
@@ -133,19 +132,19 @@ case "$CHOICE" in
         ((IDX++)) || true
       done
 
-      cat > "$CONFIG_DIR/config.yaml" <<EOF
-# Yardmaster config
-edge_device_ip: "$EDGE_IP"
-iota_host: "$IOTA_HOST"
-iota_north_port: "$IOTA_NORTH"
-iota_south_port: "$IOTA_SOUTH"
-api_key: "$API_KEY"
-fiware_service: "$FIWARE_SVC"
-fiware_servicepath: "/"
-log_level: "INFO"
-
-backends:${BACKENDS}
-EOF
+      while IFS= read -r line; do
+        if [[ "$line" == "{{BACKENDS}}" ]]; then
+          printf '%s' "$BACKENDS"
+        else
+          line="${line//\{\{EDGE_IP\}\}/$EDGE_IP}"
+          line="${line//\{\{IOTA_HOST\}\}/$IOTA_HOST}"
+          line="${line//\{\{IOTA_NORTH\}\}/$IOTA_NORTH}"
+          line="${line//\{\{IOTA_SOUTH\}\}/$IOTA_SOUTH}"
+          line="${line//\{\{API_KEY\}\}/$API_KEY}"
+          line="${line//\{\{FIWARE_SVC\}\}/$FIWARE_SVC}"
+          echo "$line"
+        fi
+      done < "$ROOT/config.example/config.yaml.template" > "$CONFIG_DIR/config.yaml"
       echo "  -> config/config.yaml written."
     fi
 

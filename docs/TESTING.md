@@ -5,8 +5,7 @@ Quick smoke test for Yardmaster → Glimmer (LEDStrip) without Pylon/Odoo.
 ## Prerequisites
 
 - Glimmer running (simulator or real)
-- Yardmaster running
-- `config/config.env`: `GLIMMER_BASE_URL`, `ENABLE_LED_STRIP=true`
+- Yardmaster running (`./setup.sh` → Install essentials, add at least one Glimmer backend)
 
 ## Steps
 
@@ -22,15 +21,15 @@ Quick smoke test for Yardmaster → Glimmer (LEDStrip) without Pylon/Odoo.
    ./run.sh
    ```
 
-3. **Verify health**
+3. **Verify health** (per-backend port, e.g. Glimmer suffix A → 33365)
    ```bash
-   curl http://localhost:8080/health
+   curl http://localhost:33365/health
    # Expect: {"status":"ok"}
    ```
 
-4. **Test: turn off LED**
+4. **Test: turn off LED** (use the port for your Glimmer backend)
    ```bash
-   curl -X POST http://localhost:8080/command \
+   curl -X POST http://localhost:33365/command \
      -H "Content-Type: application/json" \
      -d '{"effectSet": {"effect": "off"}}'
    ```
@@ -38,12 +37,12 @@ Quick smoke test for Yardmaster → Glimmer (LEDStrip) without Pylon/Odoo.
 
 5. **Test: set effect** (e.g. fire)
    ```bash
-   curl -X POST http://localhost:8080/command \
+   curl -X POST http://localhost:33365/command \
      -H "Content-Type: application/json" \
      -d '{"effectSet": {"effect": "fire"}}'
    ```
 
 ## Ports
 
-- Yardmaster: `YARDMASTER_PORT` (default 8080)
+- Yardmaster per-backend: 33300 + ASCII(suffix), e.g. Glimmer A → 33365
 - Glimmer: `api_port` (default 1129)
