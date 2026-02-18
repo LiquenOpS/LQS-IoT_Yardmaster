@@ -40,7 +40,7 @@ def main():
         except Exception as e:
             print(f"  Error: {e}", file=sys.stderr)
 
-    print("Done. To remove Orion entities, run LQS-IoT_Pylon/debug/delete_entity.sh")
+    print("Done. To remove Orion entities, run LQS-IoT_Pylon/debug/menu.sh → Delete entity")
 
 
 if __name__ == "__main__":
