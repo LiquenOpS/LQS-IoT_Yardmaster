@@ -12,15 +12,15 @@ fiware_servicepath: "/"
 log_level: "INFO"
 
 # Backends: each entry = one Yardmaster port, one device in IOTA
-# type: Glimmer (LEDStrip) or Anthias (Signage)
-# port: from 44011 upward
-# device_id: NeoPixel-{MAC6}{suffix} for Glimmer, Anthias-{MAC6}{suffix} for Anthias
+# type: BackendType (Glimmer→LEDStrip, Anthias→Signage)
+# device_id: {prefix}-{MAC6}-{suffix}  (prefix: NeoPixel/Glimmer, Anthias; suffix A,B,C...)
+# port: 33300 + ASCII(suffix), e.g. A=33365, B=33366
 backends:
   - type: Glimmer
-    port: 44011
-    device_id: "NeoPixel-000001A"
+    port: 33365
+    device_id: "NeoPixel-000001-A"
     base_url: "http://localhost:1129"
   - type: Anthias
-    port: 44012
-    device_id: "Anthias-000001B"
+    port: 33366
+    device_id: "Anthias-000001-B"
     base_url: "http://localhost:8000/api/v2/assets"

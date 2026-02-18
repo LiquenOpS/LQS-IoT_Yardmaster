@@ -81,32 +81,31 @@ case "$CHOICE" in
 
       MAC6=$(get_mac6)
       BACKENDS=""
-      PORT=44011
       IDX=0
 
       for ((i=0; i<N_GLIMMER; i++)); do
         SUF="${SUFFIXES:$IDX:1}"
+        PORT=$((33300 + $(printf '%d' "'$SUF")))
         read -p "  Glimmer $((i+1)) base_url [http://localhost:1129]: " BASE
         BASE="${BASE:-http://localhost:1129}"
         BACKENDS="${BACKENDS}
   - type: Glimmer
     port: $PORT
-    device_id: \"NeoPixel-${MAC6}${SUF}\"
+    device_id: \"NeoPixel-${MAC6}-${SUF}\"
     base_url: \"$BASE\""
-        ((PORT++)) || true
         ((IDX++)) || true
       done
 
       for ((i=0; i<N_ANTHIAS; i++)); do
         SUF="${SUFFIXES:$IDX:1}"
+        PORT=$((33300 + $(printf '%d' "'$SUF")))
         read -p "  Anthias $((i+1)) base_url [http://localhost:8000/api/v2/assets]: " BASE
         BASE="${BASE:-http://localhost:8000/api/v2/assets}"
         BACKENDS="${BACKENDS}
   - type: Anthias
     port: $PORT
-    device_id: \"Anthias-${MAC6}${SUF}\"
+    device_id: \"Anthias-${MAC6}-${SUF}\"
     base_url: \"$BASE\""
-        ((PORT++)) || true
         ((IDX++)) || true
       done
 
