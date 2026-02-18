@@ -17,6 +17,18 @@ echo "  6) Exit"
 echo ""
 read -p "Choice [1-6]: " CHOICE
 
+# Try to detect edge device IP (for IOTA callback base). Fallback: localhost.
+get_edge_ip() {
+  _ip=""
+  if command -v ip &>/dev/null; then
+    _ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')
+  fi
+  if [ -z "$_ip" ] && command -v hostname &>/dev/null; then
+    _ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+  fi
+  [ -n "$_ip" ] && echo "$_ip" || echo "localhost"
+}
+
 # Get MAC last 6 for device_id suffix
 get_mac6() {
   _mac=""
@@ -58,8 +70,9 @@ case "$CHOICE" in
     if [ "$CONFIG_CREATED" = true ]; then
       echo ""
       echo "== Common =="
-      read -p "Edge device IP (for IOTA callbacks) [localhost]: " EDGE_IP
-      EDGE_IP="${EDGE_IP:-localhost}"
+      _default_ip=$(get_edge_ip)
+      read -p "Edge device IP (for IOTA callbacks) [${_default_ip}]: " EDGE_IP
+      EDGE_IP="${EDGE_IP:-$_default_ip}"
       read -p "IOTA host [localhost]: " IOTA_HOST
       IOTA_HOST="${IOTA_HOST:-localhost}"
       read -p "IOTA North port [4041]: " IOTA_NORTH
