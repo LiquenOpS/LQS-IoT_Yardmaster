@@ -30,7 +30,7 @@ def main():
 
     backends = cfg.get("backends") or []
     for i, backend in enumerate(backends):
-        device_id = backend.get("device_id", f"backend{i}")
+        device_id = backend.get("device_id") or backend.get("device_name") or f"backend{i}"
         url = f"http://{iota_host}:{iota_port}/iot/devices/{device_id}"
 
         print(f"Deprovisioning {device_id}...")

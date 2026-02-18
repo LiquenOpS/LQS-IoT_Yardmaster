@@ -1,26 +1,52 @@
 # Yardmaster config — copy to config/config.yaml and edit.
 # Each backend gets its own port and adopt state.
 
+# =============================================================================
 # Common (IOTA, FIWARE)
+# =============================================================================
+
+# edge_device_ip: This machine's IP/hostname reachable by Pylon. IOTA uses it
+#   as the callback base when invoking command endpoints.
 edge_device_ip: "192.168.1.100"
+
+# iota_host: Host where Pylon IoT Agent runs.
 iota_host: "localhost"
+
+# iota_north_port: IOTA admin API (provision devices). Used by setup.sh option 2.
 iota_north_port: 4041
+
+# iota_south_port: IOTA device API (POST /iot/json). Yardmaster sends heartbeat
+#   and measures here.
 iota_south_port: 7896
+
+# api_key: Must match Pylon service group (e.g. YardmasterKey).
 api_key: "YardmasterKey"
+
+# fiware_service, fiware_servicepath: FIWARE tenant. Orion allows alphanumeric +
+#   underscore only in service name (no hyphen).
 fiware_service: "lqs_iot"
 fiware_servicepath: "/"
+
+# log_level: DEBUG, INFO, WARNING, ERROR
 log_level: "INFO"
 
+# =============================================================================
 # Backends: each entry = one Yardmaster port, one device in IOTA
-# type: BackendType (Glimmer→LEDStrip, Anthias→Signage)
-# device_id: {prefix}-{MAC6}-{suffix}  (prefix: NeoPixel/Glimmer, Anthias; suffix A,B,C...)
-# port: 33300 + ASCII(suffix), e.g. A=33365, B=33366
+# =============================================================================
+# type:        BackendType — Glimmer (→LEDStrip) or Anthias (→Signage)
+# port:        33300 + ASCII(suffix), e.g. A=33365, B=33366
+# device_id:   IOTA device key (lowercase/alphanumeric). Used for /iot/json "i" param.
+# device_name: Orion entity id (can have mixed case). Shown in Odoo Fleet. Edit to differ.
+# base_url:    Backend API base (Glimmer: :1129, Anthias: .../api/v2/assets)
+# -----------------------------------------------------------------------------
 backends:
   - type: Glimmer
     port: 33365
-    device_id: "NeoPixel-000001-A"
+    device_id: "neopixel-000001-a"
+    device_name: "NeoPixel-000001-A"
     base_url: "http://localhost:1129"
   - type: Anthias
     port: 33366
-    device_id: "Anthias-000001-B"
+    device_id: "anthias-000001-b"
+    device_name: "Anthias-000001-B"
     base_url: "http://localhost:8000/api/v2/assets"

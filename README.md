@@ -19,7 +19,7 @@ Multi-backend FIWARE gateway. Each backend (Glimmer/LEDStrip or Anthias/Signage)
 ## Config
 
 - `config/config.yaml` — YAML with `backends` list. Each backend: `type` (BackendType: Glimmer|Anthias), `port`, `device_id`, `base_url`.
-- Device ID format: `{prefix}-{MAC6}-{suffix}` (e.g. `NeoPixel-abc123-A`). Prefix from BackendType (NeoPixel/Glimmer, Anthias). Suffix A,B,C... shared. Port = 33300 + ASCII(suffix) (A=33365, B=33366).
+- Device ID / Name: `device_id` (IOTA key, lowercase) and `device_name` (Orion entity id, can have caps). Setup asks once; both writable in config. Port = 33300 + ASCII(suffix).
 
 ## FIWARE
 

@@ -86,12 +86,18 @@ case "$CHOICE" in
       for ((i=0; i<N_GLIMMER; i++)); do
         SUF="${SUFFIXES:$IDX:1}"
         PORT=$((33300 + $(printf '%d' "'$SUF")))
+        DEF_ID="NeoPixel-${MAC6}-${SUF}"
+        read -p "  Glimmer $((i+1)) Device ID or Name [${DEF_ID}]: " DID
+        DID="${DID:-$DEF_ID}"
         read -p "  Glimmer $((i+1)) base_url [http://localhost:1129]: " BASE
         BASE="${BASE:-http://localhost:1129}"
+        # device_id: lowercase for IOTA; device_name: as entered (can have caps)
+        DID_LOWER=$(echo "$DID" | tr '[:upper:]' '[:lower:]')
         BACKENDS="${BACKENDS}
   - type: Glimmer
     port: $PORT
-    device_id: \"NeoPixel-${MAC6}-${SUF}\"
+    device_id: \"$DID_LOWER\"
+    device_name: \"$DID\"
     base_url: \"$BASE\""
         ((IDX++)) || true
       done
@@ -99,12 +105,17 @@ case "$CHOICE" in
       for ((i=0; i<N_ANTHIAS; i++)); do
         SUF="${SUFFIXES:$IDX:1}"
         PORT=$((33300 + $(printf '%d' "'$SUF")))
+        DEF_ID="Anthias-${MAC6}-${SUF}"
+        read -p "  Anthias $((i+1)) Device ID or Name [${DEF_ID}]: " DID
+        DID="${DID:-$DEF_ID}"
         read -p "  Anthias $((i+1)) base_url [http://localhost:8000/api/v2/assets]: " BASE
         BASE="${BASE:-http://localhost:8000/api/v2/assets}"
+        DID_LOWER=$(echo "$DID" | tr '[:upper:]' '[:lower:]')
         BACKENDS="${BACKENDS}
   - type: Anthias
     port: $PORT
-    device_id: \"Anthias-${MAC6}-${SUF}\"
+    device_id: \"$DID_LOWER\"
+    device_name: \"$DID\"
     base_url: \"$BASE\""
         ((IDX++)) || true
       done

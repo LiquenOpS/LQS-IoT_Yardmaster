@@ -45,7 +45,7 @@ def create_backend_app(backend_cfg, common_cfg, backend_index):
     backend_type = backend_cfg.get("type", "").strip()
     is_signage = backend_type.lower() == "anthias"
     is_ledstrip = backend_type.lower() == "glimmer"
-    entity_id = backend_cfg.get("device_id", "")
+    entity_id = backend_cfg.get("device_id") or backend_cfg.get("device_name") or ""
     base_url = (backend_cfg.get("base_url", "") or "").rstrip("/")
     port = backend_cfg.get("port", 44011)
 

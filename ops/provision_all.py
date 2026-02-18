@@ -65,7 +65,8 @@ def main():
 
     backends = cfg.get("backends") or []
     for i, backend in enumerate(backends):
-        device_id = backend.get("device_id", f"backend{i}")
+        device_id = backend.get("device_id") or backend.get("device_name") or f"backend{i}"
+        device_name = backend.get("device_name") or device_id
         port = backend.get("port", 44011 + i)
         btype = backend.get("type", "Glimmer")
         entity_type = ENTITY_TYPE.get(btype, "LEDStrip")
@@ -78,7 +79,7 @@ def main():
             "devices": [
                 {
                     "device_id": device_id,
-                    "entity_name": device_id,
+                    "entity_name": device_name,
                     "entity_type": entity_type,
                     "transport": "HTTP",
                     "protocol": "HTTP",
