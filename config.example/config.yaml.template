@@ -1,0 +1,43 @@
+# Yardmaster config - copy to config/config.yaml and edit.
+# Each backend gets its own port and adopt state.
+
+# =============================================================================
+# Common (IOTA, FIWARE)
+# =============================================================================
+
+# edge_device_ip: This machine's IP/hostname reachable by Pylon. IOTA uses it
+#   as the callback base when invoking command endpoints.
+edge_device_ip: "{{EDGE_IP}}"
+
+# iota_host: Host where Pylon IoT Agent runs.
+iota_host: "{{IOTA_HOST}}"
+
+# iota_north_port: IOTA admin API (provision devices). Used by setup.sh option 2.
+iota_north_port: {{IOTA_NORTH}}
+
+# iota_south_port: IOTA device API (POST /iot/json). Yardmaster sends heartbeat
+#   and measures here.
+iota_south_port: {{IOTA_SOUTH}}
+
+# api_key: Must match Pylon service group (e.g. YardmasterKey).
+api_key: "{{API_KEY}}"
+
+# fiware_service, fiware_servicepath: FIWARE tenant. Orion allows alphanumeric +
+#   underscore only in service name (no hyphen).
+fiware_service: "{{FIWARE_SVC}}"
+fiware_servicepath: "/"
+
+# log_level: DEBUG, INFO, WARNING, ERROR
+log_level: "INFO"
+
+# =============================================================================
+# Backends: each entry = one Yardmaster port, one device in IOTA
+# =============================================================================
+# type:        BackendType - Glimmer (->LEDStrip) or Anthias (->Signage)
+# port:        33300 + ASCII(suffix), e.g. A=33365, B=33366
+# device_id:   IOTA device key (lowercase/alphanumeric). Used for /iot/json "i" param.
+# device_name: Orion entity id (can have mixed case). Shown in Odoo Fleet. Edit to differ.
+# base_url:    Backend API base (Glimmer: :1129, Anthias: .../api/v2/assets)
+# -----------------------------------------------------------------------------
+backends:
+{{BACKENDS}}

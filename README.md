@@ -1,36 +1,28 @@
 # LQS-IoT Yardmaster
 
-Single FIWARE device (entity type **Yardmaster**) that can expose **Signage** (anthias) and/or **LEDStrip** (Glimmer) capabilities. One endpoint, one entity, attributes in camelCase (`deviceStatus`, `supportedType`, `displayUrl`).
+Multi-backend FIWARE gateway. Each backend (Glimmer/LEDStrip or Anthias/Signage) runs on its own port. Entity types: **LEDStrip**, **Signage**.
 
 ## Setup
 
 1. Run `./setup.sh` once. It will:
-   - Create `venv`, install deps from `requirements.txt` (Python 3.10+).
-   - Create `config/` from `config.example` if missing (gitignored);
-   - Prompt for Device ID / Device Name (defaults: yardmaster-01, Yardmaster-01).
-   - On first run: prompt Enable Signage? / Enable LEDStrip? and write to config.
-   - Ask whether to edit `config/config.env` for IOTA host, URLs, etc. (optional).
-   - Provision the device with FIWARE. Heartbeat (deviceStatus) is sent by the gateway service every 2 min.
-2. Start the command gateway:
-   - **As service (recommended):** In setup choose "Install systemd service", or manually:
-     `sed 's|@INSTALL_DIR@|/path/to/LQS-IoT_Yardmaster|' ops/systemd/yardmaster.service | sudo tee /etc/systemd/system/yardmaster.service`
-     then `sudo systemctl daemon-reload && sudo systemctl enable --now yardmaster`
-   - **Manual:** `./run.sh` (sources config and starts Flask).  
-   Health: `GET /health`.
+   - Create `venv`, install deps (Flask, Waitress, PyYAML).
+   - Prompt for common config (edge device IP, IOTA host, etc.).
+   - Ask: How many Glimmer backends? How many Anthias backends?
+   - Generate `config/config.yaml` with ports from 44011 upward.
+   - Optionally edit config before saving.
+   - Provision all backends with IOTA (option 2).
+2. Start the gateway:
+   - **As service:** Setup option 4, or manually install `ops/systemd/yardmaster.service`.
+   - **Manual:** `./run.sh` — single process, multiple ports (Waitress).
+   - Health: `GET http://host:44011/health` (per-backend port).
+
+## Config
+
+- `config/config.yaml` — YAML with `backends` list. Each backend: `type` (BackendType: Glimmer|Anthias), `port`, `device_id`, `base_url`.
+- Device ID / Name: `device_id` (IOTA key, lowercase) and `device_name` (Orion entity id, can have caps). Setup asks once; both writable in config. Port = 33300 + ASCII(suffix).
 
 ## FIWARE
 
-- **Entity type:** `Yardmaster`
-- **Attributes:** `deviceStatus`, `supportedType`, `displayUrl` (when Signage enabled)
-- **Commands:** Signage — `listAssets`, `createAsset`, `deleteAsset`, `updatePlaylistOrder`, `updateAssetPatch`. LEDStrip — `ledConfig`, `effectSet`, `playlistResume`, `playlistAdd`, `playlistRemove` (Glimmer v2026-02-05 API).
-
-## Glimmer (LEDStrip)
-
-- `ledConfig` → `POST {GLIMMER_BASE_URL}/api/config` (new config structure: `runtime.effects_playlist`, `effects.rainbow`, etc.)
-- `effectSet` → `POST /api/effect/set`
-- `playlistResume` / `playlistAdd` / `playlistRemove` → same paths on Glimmer
-
-## Debug
-
-- Use Pylon ops to list devices/entities: `ops/list_devices.sh`, `ops/list_entities.sh`, `ops/list_services.sh`
-- `debug/send_heartbeat.sh` — manual heartbeat (for testing; gateway sends in-process every 2 min)
+- **Entity types:** `LEDStrip`, `Signage` (one per backend).
+- **Attributes:** `deviceStatus`, `adopted`, `supportedEffects` (LEDStrip), `displayUrl` (Signage).
+- **Commands:** Signage — `listAssets`, `createAsset`, `deleteAsset`, `updatePlaylistOrder`, `updateAssetPatch`. LEDStrip — `ledConfig`, `effectSet`, `playlistResume`, `playlistAdd`, `playlistRemove`, `setAdopted`.

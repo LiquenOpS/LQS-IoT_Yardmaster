@@ -1,19 +1,14 @@
 #!/bin/bash
-# Entrypoint for Flask app (used by systemd or manual run). Sources config and starts the server.
+# Entrypoint: loads config.yaml, spawns Waitress per backend.
 
 set -e
 ROOT="$(dirname "$(readlink -f "$0")")"
 cd "$ROOT"
 
-if [ ! -f "$ROOT/config/config.env" ]; then
-  echo "Error: config/config.env not found. Run ./setup.sh first." >&2
+if [ ! -f "$ROOT/config/config.yaml" ]; then
+  echo "Error: config/config.yaml not found. Run ./setup.sh first." >&2
   exit 1
 fi
-CONFIG_DIR="$ROOT/config"
-set -a
-source "$CONFIG_DIR/config.env"
-[ -f "$CONFIG_DIR/device.env" ] && source "$CONFIG_DIR/device.env"
-set +a
 
 PYTHON="${ROOT}/venv/bin/python3"
 if [ ! -x "$PYTHON" ]; then
@@ -21,4 +16,4 @@ if [ ! -x "$PYTHON" ]; then
   exit 1
 fi
 export PYTHONPATH="$ROOT"
-exec "$PYTHON" -m flask --app "gateway.app:app" run --host=0.0.0.0 --port="${YARDMASTER_PORT:-8080}"
+exec "$PYTHON" -m gateway.app
