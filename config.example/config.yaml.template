@@ -1,4 +1,4 @@
-# Yardmaster config — copy to config/config.yaml and edit.
+# Yardmaster config - copy to config/config.yaml and edit.
 # Each backend gets its own port and adopt state.
 
 # =============================================================================
@@ -33,7 +33,7 @@ log_level: "INFO"
 # =============================================================================
 # Backends: each entry = one Yardmaster port, one device in IOTA
 # =============================================================================
-# type:        BackendType — Glimmer (→LEDStrip) or Anthias (→Signage)
+# type:        BackendType - Glimmer (->LEDStrip) or Anthias (->Signage)
 # port:        33300 + ASCII(suffix), e.g. A=33365, B=33366
 # device_id:   IOTA device key (lowercase/alphanumeric). Used for /iot/json "i" param.
 # device_name: Orion entity id (can have mixed case). Shown in Odoo Fleet. Edit to differ.
